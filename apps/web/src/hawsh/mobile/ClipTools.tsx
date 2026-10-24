@@ -1,7 +1,7 @@
 /**
  * Phone clip tools bar (stage 3): replaces the main tool bar while a clip is selected, CapCut-style.
- * Quick tools act at once (split, duplicate, delete); the rest open a small bottom sheet (trim,
- * speed, volume, silence cut). The work itself is in clip-tools.ts.
+ * Quick tools act at once (split, duplicate, delete); the rest open a small bottom sheet (text
+ * edit, trim, speed, volume, silence cut). The work itself is in clip-tools.ts.
  */
 import React, { useEffect, useState } from "react";
 import { useProjectStore } from "../../stores/project-store";
@@ -9,14 +9,17 @@ import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
 import type { Region } from "../silence-tools";
 import {
-  canCutAt, cutSilences, duplicate, findSilences, NOT_UNDER_PLAYHEAD, remove, selectedTarget, setSpeed, setVolume,
+  canCutAt, cutSilences, FAILED, duplicate, findSilences, NOT_UNDER_PLAYHEAD, remove, selectedTarget, setSpeed, setVolume,
   silenceTotal, splitAt, SPEEDS, trimAt, type Target,
 } from "./clip-tools";
+import { editText } from "./add-tools";
+import { TextEditor } from "./AddSheets";
 
-type Sheet = "trim" | "speed" | "volume" | "silence";
+type Sheet = "edit" | "trim" | "speed" | "volume" | "silence";
 interface Tool { id: string; label: string; icon: string; sheet?: Sheet; run?: (t: Target, time: number) => Promise<string | null> }
 
 const TOOLS: Tool[] = [
+  { id: "edit", label: "تعديل", icon: "✎", sheet: "edit" },
   { id: "split", label: "تقسيم", icon: "⫼", run: splitAt },
   { id: "trim", label: "قص", icon: "✂️", sheet: "trim" },
   { id: "speed", label: "سرعة", icon: "⏩", sheet: "speed" },
@@ -28,9 +31,9 @@ const TOOLS: Tool[] = [
 
 /** Which tools fit the target: text has no media; still images have no speed or sound. */
 export function toolsFor(t: Target): string[] {
-  if (t.kind === "text-clip") return ["split", "trim", "delete"];
+  if (t.kind === "text-clip") return ["edit", "split", "trim", "delete"];
   if (t.trackType === "image") return ["split", "trim", "duplicate", "delete"];
-  return TOOLS.map((x) => x.id);
+  return TOOLS.map((x) => x.id).filter((id) => id !== "edit");
 }
 
 const btn = "rounded-xl border border-border bg-bg-1 px-3 py-3 text-sm font-semibold active:bg-bg-2 disabled:opacity-40";
@@ -97,6 +100,9 @@ export const ClipTools: React.FC = () => {
               <span className="text-sm font-bold">{TOOLS.find((t) => t.sheet === sheet)?.label}</span>
               <button type="button" aria-label="إغلاق" onClick={() => setSheet(null)} className="grid h-8 w-8 place-items-center rounded-full text-lg">✕</button>
             </div>
+            {sheet === "edit" && target.kind === "text-clip" && (
+              <TextEditor key={target.id} initial={target.text} onSave={(text) => { if (editText(target.id, text)) setSheet(null); else setMessage(FAILED); }} />
+            )}
             {sheet === "trim" && (
               <div className="space-y-2">
                 <p className="text-xs text-fg-muted">{canCutAt(target, playhead) ? "يقص عند المؤشر الأبيض." : NOT_UNDER_PLAYHEAD}</p>

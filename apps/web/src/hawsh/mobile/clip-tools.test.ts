@@ -41,9 +41,9 @@ describe("selectedTarget", () => {
   });
 
   it("offers only the tools that fit the clip", () => {
-    expect(toolsFor(selectedTarget(project, [{ type: "text-clip", id: "t1" }])!)).toEqual(["split", "trim", "delete"]);
+    expect(toolsFor(selectedTarget(project, [{ type: "text-clip", id: "t1" }])!)).toEqual(["edit", "split", "trim", "delete"]);
     expect(toolsFor(selectedTarget(project, [{ type: "clip", id: "img" }])!)).toEqual(["split", "trim", "duplicate", "delete"]);
-    expect(toolsFor(selectedTarget(project, [{ type: "clip", id: "c1" }])!)).toContain("silence");
+    expect(toolsFor(selectedTarget(project, [{ type: "clip", id: "c1" }])!)).toEqual(["split", "trim", "speed", "volume", "silence", "duplicate", "delete"]);
   });
 });
 

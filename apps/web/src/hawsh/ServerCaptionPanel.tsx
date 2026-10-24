@@ -36,9 +36,9 @@ const LANGUAGES = [
   { value: "hi", label: "हिन्दी" },
 ];
 
-interface Props { clipId?: string; maxWordsPerLine?: number }
+interface Props { clipId?: string; maxWordsPerLine?: number; buttonLabel?: string; emptyHint?: string }
 
-export const ServerCaptionPanel: React.FC<Props> = ({ clipId, maxWordsPerLine = 5 }) => {
+export const ServerCaptionPanel: React.FC<Props> = ({ clipId, maxWordsPerLine = 5, buttonLabel = "فرّغ المقطع المحدد", emptyHint = "حدّد مقطع فيديو أو صوت أولاً." }) => {
   const signedIn = useHawshStore((s) => s.status === "ready");
   const getClip = useProjectStore((s) => s.getClip);
   const getMediaItem = useProjectStore((s) => s.getMediaItem);
@@ -150,13 +150,13 @@ export const ServerCaptionPanel: React.FC<Props> = ({ clipId, maxWordsPerLine = 
       )}
 
       <Button
-        label={busy ? "جارٍ التفريغ…" : "فرّغ المقطع المحدد"}
+        label={busy ? "جارٍ التفريغ…" : buttonLabel}
         icon={busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Sparkles size={14} aria-hidden />}
         variant="primary" size="md" onClick={() => void transcribe()} isDisabled={!canTranscribe || busy}
         className="w-full justify-center"
       />
       {!canTranscribe && (
-        <Text type="supporting" color="secondary" className="block text-center text-[9px]">حدّد مقطع فيديو أو صوت أولاً.</Text>
+        <Text type="supporting" color="secondary" className="block text-center text-[9px]">{emptyHint}</Text>
       )}
     </div>
   );

@@ -45,7 +45,8 @@ export const HawshLibraryButton: React.FC = () => {
   );
 };
 
-const HawshLibraryDialog: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+/** `onAdded` gets the new media IDs (the phone editor puts them on the timeline; the Media panel does not). */
+export const HawshLibraryDialog: React.FC<{ onClose: () => void; onAdded?: (mediaIds: string[]) => void | Promise<void> }> = ({ onClose, onAdded }) => {
   const email = useHawshStore((s) => s.email);
   const importMedia = useProjectStore((s) => s.importMedia);
   const [source, setSource] = useState<HawshSource>("generations");
@@ -75,14 +76,18 @@ const HawshLibraryDialog: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     setAdding(true);
     let ok = 0;
     const failed: string[] = [];
+    const added: string[] = [];
     for (const item of picked) {
       try {
+        const before = new Set(useProjectStore.getState().project.mediaLibrary.items.map((m) => m.id));
         const res = await importMedia(await itemToFile(item));
         if (res.success) ok++; else failed.push(item.title);
+        if (res.success) added.push(...useProjectStore.getState().project.mediaLibrary.items.filter((m) => !before.has(m.id)).map((m) => m.id));
       } catch {
         failed.push(item.title);
       }
     }
+    if (added.length) await onAdded?.(added);
     setAdding(false);
     if (ok) toast.success(ok === 1 ? "Added to the project" : `${ok} items added to the project`);
     if (failed.length) toast.error("Some items couldn't be added", failed.join(", "));
