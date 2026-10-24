@@ -1,18 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const placed: Array<[string, string | undefined, number]> = [];
+let tracks: Array<{ id: string; type: string; clips: unknown[] }> = [];
+async function place(id: string, trackId: string | undefined, start: number): Promise<{ success: boolean }> {
+  placed.push([id, trackId, start]);
+  // The clip lands on the target track (or a new "t-new" track) so the next append goes after it.
+  let track = tracks.find((t) => t.id === trackId);
+  if (!track) { track = { id: "t-new", type: "video", clips: [] }; tracks.push(track); }
+  track.clips.push({ id: `c-${id}`, startTime: start, duration: 4 });
+  return { success: true };
+}
 const state = {
-  project: { timeline: { tracks: [] as unknown[] } },
-  placeMediaClip: vi.fn(async (id: string, trackId: string | undefined, start: number) => {
-    placed.push([id, trackId, start]);
-    // The clip lands on the target track (or a new "t-new" track) so the next append goes after it.
-    const tracks = state.project.timeline.tracks as Array<{ id: string; type: string; clips: unknown[] }>;
-    let track = tracks.find((t) => t.id === trackId);
-    if (!track) { track = { id: "t-new", type: "video", clips: [] }; tracks.push(track); }
-    track.clips.push({ id: `c-${id}`, startTime: start, duration: 4 });
-    return { success: true };
-  }),
-  addClip: vi.fn(async (trackId: string, id: string, start: number) => state.placeMediaClip(id, trackId, start)),
+  get project() { return { timeline: { tracks } }; },
+  set project(p: { timeline: { tracks: unknown[] } }) { tracks = p.timeline.tracks as typeof tracks; },
+  placeMediaClip: vi.fn(place),
+  addClip: vi.fn((trackId: string, id: string, start: number) => place(id, trackId, start)),
   createTextClip: vi.fn((trackId: string, start: number, text: string) => ({ id: "txt", trackId, startTime: start, text })),
   updateTextContent: vi.fn((id: string, text: string) => ({ id, text })),
 };
