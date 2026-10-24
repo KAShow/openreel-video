@@ -14,7 +14,7 @@ export const EDGE = 0.05;
 
 export type Target =
   | { kind: "clip"; id: string; clip: Clip; trackType: string }
-  | { kind: "text-clip"; id: string; start: number; duration: number };
+  | { kind: "text-clip"; id: string; start: number; duration: number; text: string };
 
 /** The single selected timeline item the clip tools act on, or null. */
 export function selectedTarget(project: Pick<Project, "timeline"> & { textClips?: Project["textClips"] }, selected: readonly { type: string; id: string }[]): Target | null {
@@ -28,7 +28,7 @@ export function selectedTarget(project: Pick<Project, "timeline"> & { textClips?
   }
   if (item.type === "text-clip") {
     const t = (project.textClips ?? []).find((c) => c.id === item.id);
-    if (t) return { kind: "text-clip", id: t.id, start: t.startTime, duration: t.duration };
+    if (t) return { kind: "text-clip", id: t.id, start: t.startTime, duration: t.duration, text: t.text };
   }
   return null;
 }

@@ -3,7 +3,8 @@
  * and a bottom tool bar whose tools open as bottom sheets. Rendered by EditorInterface instead of
  * its desktop/compact layout on phones (see phone.ts), after the editor is initialised, so all
  * editor services keep running. While a clip is selected the bottom bar becomes its tools (ClipTools,
- * stage 3). Later stages fill the remaining sheets.
+ * stage 3). Stage 4 adds the text sheet, captions on the clip under the playhead and the "+" library
+ * button. Later stages fill the remaining sheets.
  */
 import React, { Suspense, useState } from "react";
 import { useProjectStore } from "../../stores/project-store";
@@ -16,6 +17,8 @@ import { ServerCaptionPanel } from "../ServerCaptionPanel";
 import { TouchTimeline } from "./TouchTimeline";
 import { ClipTools } from "./ClipTools";
 import { selectedTarget } from "./clip-tools";
+import { AddMediaButton, TextComposer } from "./AddSheets";
+import { captionClipId } from "./add-tools";
 
 const ChatPanel = React.lazy(() => import("../../components/editor/chat/ChatPanel").then((m) => ({ default: m.ChatPanel })));
 
@@ -73,8 +76,9 @@ export const MobileEditor: React.FC = () => {
         </div>
       </section>
 
-      <section className="min-h-0 flex-1 overflow-hidden" aria-label="الخط الزمني">
+      <section className="relative min-h-0 flex-1 overflow-hidden" aria-label="الخط الزمني">
         <TouchTimeline />
+        <AddMediaButton />
       </section>
 
       {clipSelected ? <ClipTools /> : (
@@ -98,7 +102,10 @@ export const MobileEditor: React.FC = () => {
               <button type="button" aria-label="إغلاق" onClick={() => setSheet(null)} className="grid h-8 w-8 place-items-center rounded-full text-lg">✕</button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              {sheet === "captions" && <ServerCaptionPanel />}
+              {sheet === "captions" && (
+                <ServerCaptionPanel clipId={captionClipId(project, playhead)} buttonLabel="فرّغ المقطع اللي تحت المؤشر" emptyHint="أضف فيديو فيه كلام أولاً." />
+              )}
+              {sheet === "text" && <TextComposer onDone={() => setSheet(null)} />}
               {sheet === "assistant" && (
                 <div className="h-[55vh]">
                   <Suspense fallback={<div className="p-4 text-center text-xs text-fg-muted">…</div>}>
@@ -106,7 +113,7 @@ export const MobileEditor: React.FC = () => {
                   </Suspense>
                 </div>
               )}
-              {sheet !== "captions" && sheet !== "assistant" && (
+              {sheet !== "captions" && sheet !== "assistant" && sheet !== "text" && (
                 <p className="py-8 text-center text-sm text-fg-muted" dir="rtl" data-no-translate="">هذه الأداة تُضاف في المرحلة القادمة.</p>
               )}
             </div>
