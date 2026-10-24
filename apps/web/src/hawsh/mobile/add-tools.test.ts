@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const placed: Array<[string, string | undefined, number]> = [];
 let tracks: Array<{ id: string; type: string; clips: unknown[] }> = [];
+const media: Array<{ id: string; type: string }> = [];
 async function place(id: string, trackId: string | undefined, start: number): Promise<{ success: boolean }> {
   placed.push([id, trackId, start]);
   // The clip lands on the target track (or a new "t-new" track) so the next append goes after it.
@@ -11,10 +12,16 @@ async function place(id: string, trackId: string | undefined, start: number): Pr
   return { success: true };
 }
 const state = {
-  get project() { return { timeline: { tracks } }; },
-  set project(p: { timeline: { tracks: unknown[] } }) { tracks = p.timeline.tracks as typeof tracks; },
+  get project() { return { timeline: { tracks }, mediaLibrary: { items: media } }; },
+  set project(p: { timeline: { tracks: unknown[] }; mediaLibrary?: { items: unknown[] } }) { tracks = p.timeline.tracks as typeof tracks; },
   placeMediaClip: vi.fn(place),
   addClip: vi.fn((trackId: string, id: string, start: number) => place(id, trackId, start)),
+  importMedia: vi.fn(async (file: File) => {
+    if (file.name.startsWith("bad")) return { success: false };
+    media.push({ id: file.name, type: file.type.split("/")[0] });
+    return { success: true };
+  }),
+  addClipToNewTrack: vi.fn(async (id: string, start: number) => { placed.push([id, "new-audio", start]); return { success: true }; }),
   createTextClip: vi.fn((trackId: string, start: number, text: string) => ({ id: "txt", trackId, startTime: start, text })),
   updateTextContent: vi.fn((id: string, text: string) => ({ id, text })),
 };
@@ -23,11 +30,11 @@ vi.mock("../../stores/project/insert-timeline-overlay", () => ({
   insertTimelineOverlay: async (_t: number, _d: number, create: (trackId: string) => unknown) => create("overlay-track"),
 }));
 
-const { addText, appendToTimeline, captionClipId, editText, mainTrack, PHONE_TEXT_STYLE } = await import("./add-tools");
+const { addText, appendToTimeline, captionClipId, editText, importFiles, mainTrack, PHONE_TEXT_STYLE } = await import("./add-tools");
 
 const clip = (id: string, mediaId: string, startTime: number, duration: number) => ({ id, mediaId, startTime, duration });
 
-beforeEach(() => { placed.length = 0; });
+beforeEach(() => { placed.length = 0; media.length = 0; });
 
 describe("text", () => {
   it("adds trimmed text at the playhead with Arabic-safe spacing, and ignores empty text", async () => {
@@ -58,6 +65,16 @@ describe("library to timeline", () => {
     expect(mainTrack(state.project as never)).toBeNull();
     await appendToTimeline(["m1", "m2"]);
     expect(placed).toEqual([["m1", undefined, 0], ["m2", "t-new", 4]]);
+  });
+});
+
+describe("files from the phone", () => {
+  it("imports them, appends video and images to the main track, puts audio on its own track, and counts failures", async () => {
+    state.project = { timeline: { tracks: [{ id: "v", type: "video", clips: [clip("c1", "m", 0, 5)] }] } };
+    const file = (name: string, type: string) => new File(["x"], name, { type });
+    const res = await importFiles([file("a.mp4", "video/mp4"), file("bad.mov", "video/quicktime"), file("song.mp3", "audio/mpeg"), file("b.jpg", "image/jpeg")]);
+    expect(res).toEqual({ placed: 3, failed: 1 });
+    expect(placed).toEqual([["a.mp4", "v", 5], ["song.mp3", "new-audio", 0], ["b.jpg", "v", 9]]);
   });
 });
 

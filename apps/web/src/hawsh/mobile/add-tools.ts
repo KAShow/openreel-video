@@ -1,6 +1,6 @@
 /**
- * Adding things on the phone editor (stage 4): text at the playhead, Director's Eyes library items at
- * the end of the main track, and the clip that auto captions should transcribe. Same store actions as
+ * Adding things on the phone editor (stage 4): text at the playhead, files from the phone and Director's
+ * Eyes library items at the end of the main track, and the clip that auto captions should transcribe. Same store actions as
  * the desktop editor.
  */
 import type { Project, TextStyle } from "@openreel/core";
@@ -43,18 +43,35 @@ export const trackEnd = (track: { clips: readonly { startTime: number; duration:
   track.clips.reduce((end, c) => Math.max(end, c.startTime + c.duration), 0);
 
 /**
- * Puts library media one after another at the end of the main track, or on a new track when there is
- * none. Added straight onto the main track: placeMediaClip would stack it on another track whenever a
- * text clip shares the main track at that time.
+ * Puts media on the timeline: video and images one after another at the end of the main track (a new
+ * track when there is none), audio on its own track from 0. Added straight onto the main track:
+ * placeMediaClip would stack it on another track whenever a text clip shares the main track there.
  */
 export async function appendToTimeline(mediaIds: readonly string[]): Promise<number> {
   let placed = 0;
   for (const id of mediaIds) {
+    const type = store().project.mediaLibrary.items.find((m) => m.id === id)?.type;
     const track = mainTrack(store().project);
-    const res = track ? await store().addClip(track.id, id, trackEnd(track)) : await store().placeMediaClip(id, undefined, 0);
+    const res = type === "audio" ? await store().addClipToNewTrack(id, 0)
+      : track ? await store().addClip(track.id, id, trackEnd(track))
+      : await store().placeMediaClip(id, undefined, 0);
     if (res.success) placed++;
   }
   return placed;
+}
+
+/** Imports files picked on the phone and puts them on the timeline. */
+export async function importFiles(files: readonly File[]): Promise<{ placed: number; failed: number }> {
+  const added: string[] = [];
+  let failed = 0;
+  for (const file of files) {
+    const before = new Set(store().project.mediaLibrary.items.map((m) => m.id));
+    const res = await store().importMedia(file);
+    if (!res.success) { failed++; continue; }
+    added.push(...store().project.mediaLibrary.items.filter((m) => !before.has(m.id)).map((m) => m.id));
+  }
+  const placed = await appendToTimeline(added);
+  return { placed, failed: failed + (added.length - placed) };
 }
 
 /**

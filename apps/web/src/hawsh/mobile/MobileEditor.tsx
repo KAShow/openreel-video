@@ -68,11 +68,11 @@ export const MobileEditor: React.FC = () => {
       <section className="relative min-h-0 shrink-0 basis-[46%] bg-black" aria-label="المعاينة">
         <Preview hideControls />
         <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-black/70 to-transparent px-4 pb-2 pt-6 text-white" dir="ltr">
-          <span className="font-mono text-xs tabular-nums">{fmt(playhead)} / {fmt(duration)}</span>
+          <span className="w-20 font-mono text-xs tabular-nums">{fmt(playhead)} / {fmt(duration)}</span>
           <button type="button" aria-label={playing ? "إيقاف" : "تشغيل"} onClick={togglePlayback} className="grid h-11 w-11 place-items-center rounded-full bg-white/90 text-lg text-black">
             {playing ? "❚❚" : "▶"}
           </button>
-          <span className="w-16" />
+          <UndoRedo />
         </div>
       </section>
 
@@ -120,6 +120,20 @@ export const MobileEditor: React.FC = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+/** Undo / redo for the phone (the desktop has keyboard shortcuts and the toolbar). */
+const UndoRedo: React.FC = () => {
+  // Re-render on every project change so the enabled state follows the history.
+  useProjectStore((s) => s.project);
+  const { undo, redo, canUndo, canRedo } = useProjectStore.getState();
+  const btn = "grid h-9 w-9 place-items-center rounded-full bg-white/15 text-lg disabled:opacity-30";
+  return (
+    <div className="flex w-20 justify-end gap-2" data-testid="undo-redo">
+      <button type="button" aria-label="تراجع" className={btn} disabled={!canUndo()} onClick={() => void undo()}>↶</button>
+      <button type="button" aria-label="إعادة" className={btn} disabled={!canRedo()} onClick={() => void redo()}>↷</button>
     </div>
   );
 };
