@@ -4,7 +4,7 @@
  * its desktop/compact layout on phones (see phone.ts), after the editor is initialised, so all
  * editor services keep running. While a clip is selected the bottom bar becomes its tools (ClipTools,
  * stage 3). Stage 4 adds the text sheet, captions on the clip under the playhead and the "+" library
- * button. Later stages fill the remaining sheets.
+ * button. Stage 5: "Export" opens the phone export sheet (PhoneExport) instead of the desktop dialog.
  */
 import React, { Suspense, useState } from "react";
 import { useProjectStore } from "../../stores/project-store";
@@ -12,13 +12,13 @@ import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
 import { useRouter } from "../../hooks/use-router";
 import { Preview } from "../../components/editor/Preview";
-import { Toolbar } from "../../components/editor/Toolbar";
 import { ServerCaptionPanel } from "../ServerCaptionPanel";
 import { TouchTimeline } from "./TouchTimeline";
 import { ClipTools } from "./ClipTools";
 import { selectedTarget } from "./clip-tools";
 import { AddMediaButton, TextComposer } from "./AddSheets";
 import { captionClipId } from "./add-tools";
+import { PhoneExport } from "./PhoneExport";
 
 const ChatPanel = React.lazy(() => import("../../components/editor/chat/ChatPanel").then((m) => ({ default: m.ChatPanel })));
 
@@ -47,22 +47,20 @@ export const MobileEditor: React.FC = () => {
   const playing = useTimelineStore((s) => s.playbackState === "playing");
   const playhead = useTimelineStore((s) => s.playheadPosition);
   const togglePlayback = useTimelineStore((s) => s.togglePlayback);
-  const openModal = useUIStore((s) => s.openModal);
   const project = useProjectStore((s) => s.project);
   const selectedItems = useUIStore((s) => s.selectedItems);
   const clipSelected = selectedTarget(project, selectedItems) !== null;
   const [sheet, setSheet] = useState<SheetId | null>(null);
+  const [exporting, setExporting] = useState(false);
   const current = TOOLS.find((t) => t.id === sheet);
 
   return (
     <div className="hawsh-mobile flex h-full w-full flex-col overflow-hidden bg-bg text-fg" data-testid="hawsh-mobile-editor">
-      {/* Export logic and its dialog live in the desktop Toolbar; keep it mounted but invisible. */}
-      <div hidden aria-hidden><Toolbar /></div>
 
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3" dir="rtl" data-no-translate="">
         <button type="button" aria-label="رجوع" onClick={() => navigate("welcome")} className="grid h-10 w-10 place-items-center rounded-full text-lg">→</button>
         <div className="min-w-0 flex-1 truncate text-center text-sm font-semibold" dir="auto">{projectName}</div>
-        <button type="button" onClick={() => openModal("export")} className="h-9 rounded-full bg-primary px-4 text-sm font-bold text-white">تصدير</button>
+        <button type="button" onClick={() => setExporting(true)} className="h-9 rounded-full bg-primary px-4 text-sm font-bold text-white">تصدير</button>
       </header>
 
       <section className="relative min-h-0 shrink-0 basis-[46%] bg-black" aria-label="المعاينة">
@@ -120,6 +118,7 @@ export const MobileEditor: React.FC = () => {
           </div>
         </div>
       )}
+      {exporting && <PhoneExport onClose={() => setExporting(false)} />}
     </div>
   );
 };
