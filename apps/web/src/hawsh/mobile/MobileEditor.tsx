@@ -11,6 +11,7 @@ import { useProjectStore } from "../../stores/project-store";
 import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
 import { useRouter } from "../../hooks/use-router";
+import { SKIP_WELCOME } from "../simple";
 import { Preview } from "../../components/editor/Preview";
 import { ServerCaptionPanel } from "../ServerCaptionPanel";
 import { TouchTimeline } from "./TouchTimeline";
@@ -58,7 +59,9 @@ export const MobileEditor: React.FC = () => {
     <div className="hawsh-mobile flex h-full w-full flex-col overflow-hidden bg-bg text-fg" data-testid="hawsh-mobile-editor">
 
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3" dir="rtl" data-no-translate="">
-        <button type="button" aria-label="رجوع" onClick={() => navigate("welcome")} className="grid h-10 w-10 place-items-center rounded-full text-lg">→</button>
+        {SKIP_WELCOME ? <span className="h-10 w-10" aria-hidden /> : (
+          <button type="button" aria-label="رجوع" onClick={() => navigate("welcome")} className="grid h-10 w-10 place-items-center rounded-full text-lg">→</button>
+        )}
         <div className="min-w-0 flex-1 truncate text-center text-sm font-semibold" dir="auto">{projectName}</div>
         <button type="button" onClick={() => setExporting(true)} className="h-9 rounded-full bg-primary px-4 text-sm font-bold text-white">تصدير</button>
       </header>

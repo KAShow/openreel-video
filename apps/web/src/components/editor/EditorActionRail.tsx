@@ -1,5 +1,5 @@
 import React from "react";
-import { SIMPLE_EDITOR } from "../../hawsh/simple";
+import { SIMPLE_EDITOR, SKIP_WELCOME } from "../../hawsh/simple";
 import {
   ToolcraftDropdownMenu as DropdownMenu,
   ToolcraftIconButton as IconButton,
@@ -84,17 +84,21 @@ export const EditorActionRail: React.FC = () => {
       aria-label="Editor tools"
       className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-bg-1 py-3"
     >
-      <Tooltip content="Back to home" placement="end">
-        <IconButton
-          label="Back to home"
-          icon={<House size={16} aria-hidden />}
-          size="sm"
-          variant="ghost"
-          onClick={() => navigate("welcome")}
-        />
-      </Tooltip>
+      {!SKIP_WELCOME && (
+        <>
+          <Tooltip content="Back to home" placement="end">
+            <IconButton
+              label="Back to home"
+              icon={<House size={16} aria-hidden />}
+              size="sm"
+              variant="ghost"
+              onClick={() => navigate("welcome")}
+            />
+          </Tooltip>
 
-      <div className="my-1.5 h-px w-6 bg-border" />
+          <div className="my-1.5 h-px w-6 bg-border" />
+        </>
+      )}
 
       <RailButton
         label="Search tools, effects, or ask AI"

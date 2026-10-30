@@ -28,4 +28,8 @@ export const HIDDEN_INSPECTOR_SECTIONS: ReadonlySet<string> = new Set([
  *  screen/camera recording, custom export settings, developer panels. */
 export const SIMPLE_EDITOR = true;
 
+/** No welcome screen (owner's decision 2026-10-30): the editor opens straight into a vertical
+ *  project. The screen stays in code; its links (#/welcome, #/templates, #/recent) open the editor. */
+export const SKIP_WELCOME = true;
+
 export const isHiddenSection = (id: string | undefined): boolean => !!id && HIDDEN_INSPECTOR_SECTIONS.has(id);

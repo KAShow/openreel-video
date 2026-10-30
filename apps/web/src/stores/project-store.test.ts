@@ -206,8 +206,8 @@ describe("ProjectStore", () => {
       expect(project).toBeDefined();
       expect(project.name).toBeDefined();
       expect(project.name.length).toBeGreaterThan(0);
-      expect(project.settings.width).toBe(1920);
-      expect(project.settings.height).toBe(1080);
+      expect(project.settings.width).toBe(1080);
+      expect(project.settings.height).toBe(1920);
       expect(project.settings.frameRate).toBe(30);
     });
 

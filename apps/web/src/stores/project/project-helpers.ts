@@ -7,9 +7,10 @@ import {
 } from "@openreel/core";
 import { generateProjectName } from "../../utils/project-names";
 
+// Hawsh: new projects start vertical 1080×1920 (owner's decision 2026-10-30).
 export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
-  width: 1920,
-  height: 1080,
+  width: 1080,
+  height: 1920,
   frameRate: 30,
   sampleRate: 48000,
   channels: 2,

@@ -90,8 +90,8 @@ describe("Export Readiness - Project Validation", () => {
     expect(project.name.length).toBeGreaterThan(0);
 
     expect(project.settings).toEqual({
-      width: 1920,
-      height: 1080,
+      width: 1080,
+      height: 1920,
       frameRate: 30,
       sampleRate: 48000,
       channels: 2,

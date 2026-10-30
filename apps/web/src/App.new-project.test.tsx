@@ -136,11 +136,27 @@ describe("new-project links", () => {
     expect(create).not.toHaveBeenCalled(); expect(useProjectStore.getState().project).toBe(opened);
   });
 
-  it.each(["#/welcome", "#/templates", "#/recent", "#/share/video-1"])("does not create an editor project for %s", async (hash) => {
-    window.location.hash = hash;
+  it("does not create an editor project for a shared video", async () => {
+    window.location.hash = "#/share/video-1";
     const create = vi.spyOn(useProjectStore.getState(), "createNewProject");
     const view = render(<App />);
-    expect(await view.findByText(hash.startsWith("#/share") ? "Shared video" : "Welcome")).toBeInTheDocument();
+    expect(await view.findByText("Shared video")).toBeInTheDocument();
     expect(create).not.toHaveBeenCalled(); expect(useProjectStore.getState().hasOpenProject).toBe(false);
+  });
+
+  it.each(["", "#/welcome", "#/templates", "#/recent"])("skips the welcome screen and opens a vertical project for '%s'", async (hash) => {
+    window.location.hash = hash;
+    const view = render(<App />);
+    expect(await view.findByText("Editor")).toBeInTheDocument();
+    expect(view.queryByText("Welcome")).toBeNull();
+    expect(useProjectStore.getState().project.settings).toMatchObject({ width: 1080, height: 1920, frameRate: 30 });
+  });
+
+  it("starts a #/new link without dimensions vertical", async () => {
+    window.location.hash = "#/new";
+    const create = vi.spyOn(useProjectStore.getState(), "createNewProject");
+    render(<App />);
+    await waitFor(() => expect(create).toHaveBeenCalledOnce());
+    expect(create).toHaveBeenCalledWith(expect.any(String), { width: 1080, height: 1920, frameRate: 30 });
   });
 });
