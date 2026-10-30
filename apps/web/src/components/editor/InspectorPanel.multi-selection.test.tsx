@@ -175,7 +175,7 @@ describe("InspectorPanel multi-clip workflow", () => {
       const titleEngine = useEngineStore.getState().getTitleEngine();
       expect(
         TEXT_CLIP_IDS.map((id) => titleEngine?.getTextClip(id)?.transform.position.x),
-      ).toEqual([0.25 + 10 / 1920, 0.75 + 10 / 1920]);
+      ).toEqual([0.25 + 10 / 1080, 0.75 + 10 / 1080]);
       expect(
         TEXT_CLIP_IDS.map((id) => titleEngine?.getTextClip(id)?.transform.scale.x),
       ).toEqual([1, 1]);

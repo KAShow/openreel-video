@@ -8,6 +8,8 @@ import { useProjectStore } from "./stores/project-store";
 import { useRouter } from "./hooks/use-router";
 import { useProjectRecovery } from "./hooks/useProjectRecovery";
 import { useKieAIPoller } from "./hooks/useKieAIPoller";
+import { SKIP_WELCOME } from "./hawsh/simple";
+import { DEFAULT_PROJECT_SETTINGS } from "./stores/project/project-helpers";
 import { SOCIAL_MEDIA_PRESETS, type SocialMediaCategory } from "@openreel/core";
 import { ToolcraftText as Text } from "@openreel/ui";
 
@@ -55,7 +57,7 @@ function App() {
   const hasHandledInitialRoute = useRef(false);
   useKieAIPoller();
   const showWelcome =
-    ["welcome", "templates", "recent"].includes(route) && !skipWelcomeScreen;
+    !SKIP_WELCOME && ["welcome", "templates", "recent"].includes(route) && !skipWelcomeScreen;
   const isSharePage = route === "share" && params.shareId;
 
   useEffect(() => {
@@ -69,8 +71,8 @@ function App() {
       hasHandledInitialRoute.current = true;
 
       let projectName = "New Project";
-      let width = 1920;
-      let height = 1080;
+      let width = DEFAULT_PROJECT_SETTINGS.width;
+      let height = DEFAULT_PROJECT_SETTINGS.height;
       let frameRate = fps;
 
       if (params.preset) {
@@ -105,7 +107,7 @@ function App() {
 
       createNewProject(projectName, { width, height, frameRate });
       navigate("editor");
-    } else if (route === "editor" && skipWelcomeScreen) {
+    } else if (route === "editor" && (skipWelcomeScreen || SKIP_WELCOME)) {
       hasHandledInitialRoute.current = true;
     } else if (["welcome", "templates", "recent"].includes(route)) {
       hasHandledInitialRoute.current = true;
