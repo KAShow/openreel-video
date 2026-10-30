@@ -85,6 +85,22 @@ export async function trimAt(t: Target, time: number, side: "start" | "end"): Pr
   });
 }
 
+/** The shortest a clip can be trimmed to by dragging its edge. */
+export const MIN_LENGTH = 0.1;
+
+/**
+ * Where a dragged edge handle cuts (CapCut-style trim): `dx` is the drag in seconds, positive to the
+ * right. It only shortens and keeps at least MIN_LENGTH; null when the drag is too small to cut. The
+ * result goes to trimAt, so the drag is one ordinary trim.
+ */
+export function edgeCutTime(start: number, duration: number, side: "start" | "end", dx: number): number | null {
+  const end = start + duration;
+  const time = side === "start"
+    ? Math.min(Math.max(start + dx, start), end - MIN_LENGTH)
+    : Math.max(Math.min(end + dx, end), start + MIN_LENGTH);
+  return Math.abs(time - (side === "start" ? start : end)) > EDGE ? time : null;
+}
+
 export const SPEEDS = [0.5, 1, 1.5, 2, 3] as const;
 
 export async function setSpeed(clip: Clip, speed: number): Promise<string | null> {
