@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useSyncExternalStore } from "react";
 import { TOUR_STEPS, ONBOARDING_KEY } from "./tour-steps";
+import { NO_AUTO_TOUR } from "../../../hawsh/simple";
 
 interface TourState {
   isActive: boolean;
@@ -108,6 +109,7 @@ export function useTour() {
   }, []);
 
   useEffect(() => {
+    if (NO_AUTO_TOUR) return;
     const completed = localStorage.getItem(ONBOARDING_KEY);
     if (!completed) {
       const timer = setTimeout(() => {

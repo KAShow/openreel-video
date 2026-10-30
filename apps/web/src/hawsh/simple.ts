@@ -32,4 +32,8 @@ export const SIMPLE_EDITOR = true;
  *  project. The screen stays in code; its links (#/welcome, #/templates, #/recent) open the editor. */
 export const SKIP_WELCOME = true;
 
+/** The editor tour no longer pops up on first open (owner's decision 2026-10-30). It still opens
+ *  from the menu ("Editor tour"). */
+export const NO_AUTO_TOUR = true;
+
 export const isHiddenSection = (id: string | undefined): boolean => !!id && HIDDEN_INSPECTOR_SECTIONS.has(id);
