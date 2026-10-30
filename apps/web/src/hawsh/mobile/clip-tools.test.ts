@@ -17,7 +17,7 @@ const state = {
 };
 vi.mock("../../stores/project-store", () => ({ useProjectStore: { getState: () => state } }));
 
-const { canCutAt, remove, selectedTarget, splitAt, trimAt, NOT_UNDER_PLAYHEAD } = await import("./clip-tools");
+const { canCutAt, edgeCutTime, MIN_LENGTH, remove, selectedTarget, splitAt, trimAt, NOT_UNDER_PLAYHEAD } = await import("./clip-tools");
 const { toolsFor } = await import("./ClipTools");
 
 const clip = { id: "c1", trackId: "v", mediaId: "m", startTime: 0, duration: 10, inPoint: 0, outPoint: 10 };
@@ -68,6 +68,17 @@ describe("cutting at the playhead", () => {
     state.project = { timeline: { tracks: [{ id: "v", type: "video", clips: [clip, { ...clip, id: "c3", startTime: 12 }] }] } };
     expect(await trimAt(target(), 4, "end")).toBeNull();
     expect(calls).toEqual(["begin", "clip/trimToPlayhead c1 4 end", "clip/move c3 6", "end"]);
+  });
+
+  it("turns a dragged edge handle into a cut time that only shortens", () => {
+    expect(edgeCutTime(0, 10, "start", 2.5)).toBe(2.5);
+    expect(edgeCutTime(0, 10, "end", -3)).toBe(7);
+    expect(edgeCutTime(0, 10, "start", -2)).toBeNull();
+    expect(edgeCutTime(0, 10, "end", 4)).toBeNull();
+    expect(edgeCutTime(0, 10, "start", 0.02)).toBeNull();
+    expect(edgeCutTime(0, 10, "start", 50)).toBeCloseTo(10 - MIN_LENGTH);
+    expect(edgeCutTime(0, 10, "end", -50)).toBeCloseTo(MIN_LENGTH);
+    expect(canCutAt(target(), edgeCutTime(0, 10, "start", 50)!)).toBe(true);
   });
 
   it("deletes text clips through the text engine", async () => {
