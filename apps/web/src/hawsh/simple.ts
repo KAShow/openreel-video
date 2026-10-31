@@ -36,4 +36,8 @@ export const SKIP_WELCOME = true;
  *  from the menu ("Editor tour"). */
 export const NO_AUTO_TOUR = true;
 
+/** One look, phone and computer alike (owner's decision 2026-10-31): always dark, Director's Eyes
+ *  gold (tokens in index.css). The light theme and the theme button are gone. */
+export const DARK_ONLY = true;
+
 export const isHiddenSection = (id: string | undefined): boolean => !!id && HIDDEN_INSPECTOR_SECTIONS.has(id);
