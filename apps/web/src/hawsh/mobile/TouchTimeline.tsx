@@ -4,22 +4,63 @@
  * empty space to clear. Reads the same stores as the desktop timeline; edits come in stage 3.
  * A selected clip gets white handles on both edges: drag one inward to trim that side (one trim on
  * release, through the same trimAt as the trim sheet).
+ * Learning from CapCut, stage 2: video clips show a strip of frames, the white "+" sits at the end of
+ * the main track, empty "+ add text" / "+ add audio" lanes invite the next step, the ruler reads 00:00,
+ * and a clip that is not at 1× shows its speed.
  */
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Plus } from "lucide-react";
 import { useProjectStore } from "../../stores/project-store";
 import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
-import { timelineRows, type RowClip, type RowKind } from "./rows";
+import { frameAt, timelineRows, type RowClip, type RowKind } from "./rows";
 import { edgeCutTime, selectedTarget, trimAt } from "./clip-tools";
+import { AddMediaButton } from "./AddSheets";
+import { importFiles, mainTrack } from "./add-tools";
 
 type Side = "start" | "end";
 interface Drag { id: string; side: Side; x0: number; dx: number }
-const HANDLE = 20;
+/** Trim handles: a slim white bar on the clip edge, inside a wider invisible touch area. */
+const HANDLE = 26;
+const HANDLE_BAR = 10;
 
 export const PIXELS_PER_SECOND = 56;
 const ROW_HEIGHT: Record<RowKind, number> = { video: 56, text: 30, audio: 26 };
+const ADD_SIZE = 44;
 
-export const TouchTimeline: React.FC = () => {
+const mmss = (t: number) => `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+
+/** Frames along a video clip, one square tile per tile width, each from the source time under it. */
+const Filmstrip: React.FC<{ clip: RowClip; shownStart: number; width: number }> = ({ clip, shownStart, width }) => {
+  const tile = ROW_HEIGHT.video;
+  const tiles = Math.max(1, Math.ceil(width / tile));
+  return (
+    <span className="pointer-events-none absolute inset-0 flex overflow-hidden" aria-hidden>
+      {Array.from({ length: tiles }, (_, i) => {
+        const source = clip.inPoint + ((shownStart - clip.start) + (i * tile + tile / 2) / PIXELS_PER_SECOND) * clip.speed;
+        const url = frameAt(clip.frames, source) ?? clip.thumb;
+        return url
+          ? <img key={i} src={url} alt="" draggable={false} className="h-full shrink-0 object-cover" style={{ width: tile }} />
+          : <span key={i} className="h-full shrink-0 bg-bg-3" style={{ width: tile }} />;
+      })}
+    </span>
+  );
+};
+
+/** Full-length lane inviting a first text or audio clip; its label sticks under the playhead. */
+const AddLane: React.FC<{ label: string; half: number; width: number; height: number; onClick: () => void }> = ({ label, half, width, height, onClick }) => (
+  <div className="relative" style={{ height }}>
+    <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }}
+      className="absolute top-0 h-full rounded-md bg-white/[0.06] text-start text-xs text-fg-2 active:bg-white/10"
+      style={{ left: half, width }}>
+      <span className="sticky inline-flex h-full items-center gap-1 px-2" style={{ left: half }} dir="rtl">
+        <Plus size={14} aria-hidden />{label}
+      </span>
+    </button>
+  </div>
+);
+
+export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }) => {
   const project = useProjectStore((s) => s.project);
   const duration = project.timeline?.duration ?? 0;
   const playhead = useTimelineStore((s) => s.playheadPosition);
@@ -100,6 +141,16 @@ export const TouchTimeline: React.FC = () => {
   const isSelected = (id: string) => selected.some((s) => s.id === id);
   const ticks = Array.from({ length: Math.floor(duration) + 1 }, (_, i) => i);
 
+  // The white "+" follows the end of the main track (where new clips land), clear of a trim handle.
+  const mainId = mainTrack(project)?.id;
+  const mainRow = rows.find((r) => r.kind === "video" && r.trackId === mainId) ?? rows.find((r) => r.kind === "video");
+  const mainEnd = mainRow ? Math.max(...mainRow.clips.map((c) => { const s = shown(c); return s.start + s.duration; })) : 0;
+  const addStyle = (rowHeight: number): React.CSSProperties => ({
+    left: half + mainEnd * PIXELS_PER_SECOND + (mainRow ? HANDLE + 4 : 4), top: (rowHeight - ADD_SIZE) / 2, width: ADD_SIZE, height: ADD_SIZE,
+  });
+  const laneWidth = Math.max(duration * PIXELS_PER_SECOND, 150);
+  const audioInput = useRef<HTMLInputElement>(null);
+
   return (
     <div className="relative h-full w-full select-none bg-bg" dir="ltr" data-testid="touch-timeline" data-no-translate="">
       <div ref={scroller} onScroll={onScroll} onClick={() => clearSelection()}
@@ -108,8 +159,8 @@ export const TouchTimeline: React.FC = () => {
         <div className="relative" style={{ width, minHeight: "100%" }}>
           <div className="relative h-6 text-[10px] text-fg-muted" aria-hidden>
             {ticks.map((t) => (
-              <div key={t} className="absolute top-0 h-full border-l border-border/60" style={{ left: half + t * PIXELS_PER_SECOND }}>
-                {t % 2 === 0 && <span className="ms-1 tabular-nums">{t}s</span>}
+              <div key={t} className="absolute top-0 flex h-full -translate-x-1/2 items-center" style={{ left: half + t * PIXELS_PER_SECOND }}>
+                {t % 2 === 0 ? <span className="tabular-nums">{mmss(t)}</span> : <span className="h-1 w-1 rounded-full bg-fg-muted" />}
               </div>
             ))}
           </div>
@@ -124,13 +175,13 @@ export const TouchTimeline: React.FC = () => {
                     <React.Fragment key={c.id}>
                       <button type="button" title={c.label}
                         onClick={(e) => { e.stopPropagation(); select({ type: c.selection, id: c.id, trackId: row.trackId }); }}
-                        className={`absolute top-0 h-full overflow-hidden rounded-md border-2 text-start ${isSelected(c.id) ? "border-white ring-2 ring-primary" : "border-transparent"} ${
+                        className={`absolute top-0 h-full overflow-hidden rounded-md border-2 text-start ${isSelected(c.id) ? "border-white" : "border-transparent"} ${
                           row.kind === "video" ? "bg-bg-3" : row.kind === "text" ? "bg-amber-500/80" : "bg-teal-500/70"}`}
-                        style={{
-                          left,
-                          width: w,
-                          ...(c.thumb ? { backgroundImage: `url(${c.thumb})`, backgroundRepeat: "repeat-x", backgroundSize: "auto 100%" } : {}),
-                        }}>
+                        style={{ left, width: w }}>
+                        {row.kind === "video" && <Filmstrip clip={c} shownStart={s.start} width={w} />}
+                        {row.kind === "video" && Math.abs(c.speed - 1) > 0.001 && (
+                          <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] font-semibold tabular-nums text-white">{c.speed}×</span>
+                        )}
                         {row.kind !== "video" && (
                           <span className="block truncate px-1.5 text-[11px] font-medium leading-[26px] text-black" dir="auto">{c.label}</span>
                         )}
@@ -146,24 +197,38 @@ export const TouchTimeline: React.FC = () => {
                           onPointerDown={(e) => startDrag(e, c.id, side)} onPointerMove={moveDrag}
                           onPointerUp={() => endDrag(c)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }}
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute top-0 z-10 flex h-full items-center justify-center rounded-md bg-white shadow-md"
-                          style={{ left: side === "start" ? left - HANDLE : left + w, width: HANDLE, touchAction: "none" }}>
-                          <span className="h-1/2 w-0.5 rounded bg-black/50" aria-hidden />
+                          className={`absolute top-0 z-10 flex h-full items-stretch ${side === "start" ? "justify-end" : "justify-start"}`}
+                          style={{ left: side === "start" ? left - HANDLE + 2 : left + w - 2, width: HANDLE, touchAction: "none" }}>
+                          <span className={`flex items-center justify-center bg-white ${side === "start" ? "rounded-l-md" : "rounded-r-md"}`} style={{ width: HANDLE_BAR }} aria-hidden>
+                            <span className="h-3 w-px bg-black/60" />
+                          </span>
                         </button>
                       ))}
                     </React.Fragment>
                   );
                 })}
+                {row === mainRow && <AddMediaButton style={addStyle(ROW_HEIGHT.video)} />}
               </div>
             ))}
+            {!mainRow && (
+              <div className="relative" style={{ height: ROW_HEIGHT.video }}><AddMediaButton style={addStyle(ROW_HEIGHT.video)} /></div>
+            )}
+            {rows.length > 0 && !rows.some((r) => r.kind === "text") && (
+              <AddLane label="أضف نص" half={half} width={laneWidth} height={ROW_HEIGHT.text} onClick={onAddText} />
+            )}
+            {rows.length > 0 && !rows.some((r) => r.kind === "audio") && (
+              <AddLane label="أضف صوت" half={half} width={laneWidth} height={ROW_HEIGHT.text} onClick={() => audioInput.current?.click()} />
+            )}
             {rows.length === 0 && (
-              <p className="sticky left-0 px-4 py-6 text-center text-xs text-fg-muted" dir="rtl" data-no-translate="" style={{ width: half * 2 }}>
-                الخط الزمني فارغ — أضف لقطات من مكتبة عيون المخرج.
+              <p className="sticky left-0 px-4 py-4 text-center text-xs text-fg-muted" dir="rtl" data-no-translate="" style={{ width: half * 2 }}>
+                اضغط + وأضف لقطات من جهازك أو من مكتبة عيون المخرج.
               </p>
             )}
           </div>
         </div>
       </div>
+      <input ref={audioInput} type="file" accept="audio/*" multiple hidden data-testid="add-audio-file"
+        onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; if (files.length) void importFiles(files); }} />
       {/* Fixed playhead in the middle. */}
       <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)]" aria-hidden />
     </div>

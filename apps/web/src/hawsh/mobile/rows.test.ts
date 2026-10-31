@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { timelineRows } from "./rows";
+import { frameAt, timelineRows } from "./rows";
 
 const track = (id: string, type: string, clips: unknown[] = [], extra: Record<string, unknown> = {}) => ({ id, type, clips, hidden: false, ...extra });
 const clip = (id: string, mediaId: string, startTime: number, duration: number) => ({ id, mediaId, startTime, duration });
@@ -21,6 +21,18 @@ describe("timelineRows", () => {
     expect(rows[0].clips.map((c) => [c.id, c.start, c.thumb])).toEqual([["c1", 0, "t.jpg"], ["c2", 5, "t.jpg"]]);
     expect(rows[1].clips[0]).toMatchObject({ id: "t1", label: "مرحبا", selection: "text-clip" });
     expect(rows[2].clips[0]).toMatchObject({ label: "song.mp3", selection: "clip" });
+  });
+
+  it("carries the filmstrip, in point and speed, and picks the nearest frame", () => {
+    const frames = [{ timestamp: 0, url: "f0" }, { timestamp: 2, url: "f2" }, { timestamp: 4, url: "f4" }];
+    const rows = timelineRows({
+      mediaLibrary: { items: [{ id: "m1", name: "talk.mp4", thumbnailUrl: "f0", filmstripThumbnails: frames }] },
+      timeline: { tracks: [track("vid", "video", [{ ...clip("c1", "m1", 0, 3), inPoint: 1.5, speed: 2 }])] },
+    } as never);
+    expect(rows[0].clips[0]).toMatchObject({ frames, inPoint: 1.5, speed: 2 });
+    expect(frameAt(frames, 2.9)).toBe("f2");
+    expect(frameAt(frames, 3.1)).toBe("f4");
+    expect(frameAt([], 1)).toBeNull();
   });
 
   it("splits a track holding both video and text into two rows", () => {
