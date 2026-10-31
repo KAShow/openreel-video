@@ -260,3 +260,16 @@
   letter-spacing: normal !important;
   unicode-bidi: plaintext;
 }
+
+/* Phone editor (src/hawsh/mobile): Director's Eyes gold instead of the OpenReel emerald (owner,
+   2026-10-31). Dark text on gold: buttons use text-primary-foreground. */
+.hawsh-mobile.dark {
+  --primary: 46 94% 54%;
+  --primary-foreground: 0 0% 8%;
+  --accent: #f8c61c;
+  --accent-strong: #e0ad00;
+  --accent-soft: rgb(248 198 28 / 0.2);
+  --accent-fg: #141414;
+  --accent-glow: rgb(248 198 28 / 0.45);
+  --selected: rgb(248 198 28 / 0.25);
+}

@@ -27,7 +27,7 @@ export function exportSettings(project: { settings: { width: number; height: num
 }
 
 const choice = (on: boolean) => `flex-1 rounded-xl border p-3 text-start ${on ? "border-primary bg-primary/10" : "border-border bg-bg-1"}`;
-const primary = "w-full rounded-xl bg-primary py-3 text-sm font-bold text-white disabled:opacity-40";
+const primary = "w-full rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground disabled:opacity-40";
 
 export const PhoneExport: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const project = useProjectStore((s) => s.project);

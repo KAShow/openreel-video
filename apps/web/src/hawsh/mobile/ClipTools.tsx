@@ -176,7 +176,7 @@ const SilenceControl: React.FC<{ clipId: string; onDone: () => void }> = ({ clip
   return (
     <div className="space-y-3">
       <p className="text-sm">لقيت {regions.length} سكتة، مجموعها {silenceTotal(regions)} ثانية.</p>
-      <button type="button" className={`${btn} w-full border-primary bg-primary text-white`}
+      <button type="button" className={`${btn} w-full border-primary bg-primary text-primary-foreground`}
         onClick={() => { setState({ phase: "cutting" }); void cutSilences(clipId, regions).then((err) => (err ? setState({ phase: "error", text: err }) : onDone())); }}>
         قصها
       </button>

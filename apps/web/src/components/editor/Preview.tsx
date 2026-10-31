@@ -7814,8 +7814,10 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
               }}
             >
               {/* Selection border */}
-              <div className="absolute inset-0 border-2 border-primary pointer-events-none" />
+              <div className={`absolute inset-0 border-primary pointer-events-none ${hideControls ? "border" : "border-2"}`} />
 
+              {/* Hawsh phone editor (hideControls): border only, the mouse handles don't work by touch. */}
+              {!hideControls && (<>
               {/* Move handle (center) */}
               <div
                 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-primary/80 rounded-full flex items-center justify-center cursor-move pointer-events-auto hover:bg-primary transition-colors"
@@ -7874,6 +7876,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
                 className="absolute top-1/2 -translate-y-1/2 -right-2 w-4 h-6 bg-white border-2 border-primary rounded-sm cursor-e-resize pointer-events-auto hover:bg-primary hover:border-white transition-colors"
                 onMouseDown={(e) => handleHandleMouseDown(e, "e")}
               />
+              </>)}
             </div>
           )}
 
@@ -7889,8 +7892,9 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
               }}
             >
               {/* Selection border - cyan for text clips */}
-              <div className="absolute inset-0 border-2 border-cyan-500 pointer-events-none" />
+              <div className={`absolute inset-0 border-cyan-500 pointer-events-none ${hideControls ? "border" : "border-2"}`} />
 
+              {!hideControls && (<>
               {/* Move handle (center) */}
               <div
                 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-cyan-500/80 rounded-full flex items-center justify-center cursor-move pointer-events-auto hover:bg-cyan-500 transition-colors"
@@ -7949,6 +7953,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
                 className="absolute top-1/2 -translate-y-1/2 -right-2 w-4 h-6 bg-white border-2 border-cyan-500 rounded-sm cursor-e-resize pointer-events-auto hover:bg-cyan-500 hover:border-white transition-colors"
                 onMouseDown={(e) => handleTextHandleMouseDown(e, "e")}
               />
+              </>)}
             </div>
           )}
 
@@ -7967,6 +7972,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
                 <div className="absolute inset-0 border-2 border-green-500 pointer-events-none" />
               )}
 
+              {!hideControls && (<>
               {/* Move handle (center) */}
               <div
                 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-green-500/80 rounded-full flex items-center justify-center cursor-move pointer-events-auto hover:bg-green-500 transition-colors"
@@ -8025,6 +8031,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
                 className="absolute top-1/2 -translate-y-1/2 -right-2 w-4 h-6 bg-white border-2 border-green-500 rounded-sm cursor-e-resize pointer-events-auto hover:bg-green-500 hover:border-white transition-colors"
                 onMouseDown={(e) => handleShapeHandleMouseDown(e, "e")}
               />
+              </>)}
             </div>
           )}
 

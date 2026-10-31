@@ -23,7 +23,7 @@ import { ServerCaptionPanel } from "../ServerCaptionPanel";
 import { TouchTimeline } from "./TouchTimeline";
 import { ClipTools } from "./ClipTools";
 import { selectedTarget } from "./clip-tools";
-import { AddMediaButton, TextComposer } from "./AddSheets";
+import { TextComposer } from "./AddSheets";
 import { captionClipId } from "./add-tools";
 import { PhoneExport } from "./PhoneExport";
 
@@ -69,7 +69,7 @@ export const MobileEditor: React.FC = () => {
           <button type="button" aria-label="رجوع" onClick={() => navigate("welcome")} className="grid h-10 w-10 place-items-center rounded-full text-lg">→</button>
         )}
         <div className="min-w-0 flex-1 truncate text-center text-sm font-semibold" dir="auto">{projectName}</div>
-        <button type="button" onClick={() => setExporting(true)} className="h-9 rounded-full bg-primary px-4 text-sm font-bold text-white">تصدير</button>
+        <button type="button" onClick={() => setExporting(true)} className="h-9 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground">تصدير</button>
       </header>
 
       <section className="relative min-h-0 shrink-0 basis-[44%] bg-black" aria-label="المعاينة">
@@ -84,8 +84,7 @@ export const MobileEditor: React.FC = () => {
       </div>
 
       <section className="relative min-h-0 flex-1 overflow-hidden border-t border-white/10 bg-bg" aria-label="الخط الزمني">
-        <TouchTimeline />
-        <AddMediaButton />
+        <TouchTimeline onAddText={() => setSheet("text")} />
       </section>
 
       {clipSelected ? <ClipTools /> : (

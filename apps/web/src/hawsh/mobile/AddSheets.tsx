@@ -13,7 +13,7 @@ import { addText, appendToTimeline, importFiles } from "./add-tools";
 
 const field = "w-full resize-none rounded-xl border border-border bg-bg-1 p-3 text-base leading-relaxed outline-none focus:border-primary";
 const option = "flex w-full items-center gap-3 rounded-xl border border-border bg-bg-1 p-3 text-start text-sm active:bg-bg-2 disabled:opacity-40";
-const primary = "w-full rounded-xl bg-primary py-3 text-sm font-bold text-white disabled:opacity-40";
+const primary = "w-full rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground disabled:opacity-40";
 
 /** Text box + "add": the text goes on the timeline at the playhead and is selected. */
 export const TextComposer: React.FC<{ onDone: () => void }> = ({ onDone }) => {
@@ -48,8 +48,9 @@ export const TextEditor: React.FC<{ initial: string; onSave: (text: string) => v
   );
 };
 
-/** Big "+" over the timeline: add from the phone (gallery, files, camera) or the Director's Eyes library. */
-export const AddMediaButton: React.FC = () => {
+/** White "+" at the end of the main track (placed by `style`): add from the phone (gallery, files,
+ *  camera) or the Director's Eyes library. */
+export const AddMediaButton: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   const status = useHawshStore((s) => s.status);
   const [menu, setMenu] = useState(false);
   const [library, setLibrary] = useState(false);
@@ -71,10 +72,10 @@ export const AddMediaButton: React.FC = () => {
   };
 
   return (
-    <>
-      <button type="button" aria-label="أضف فيديو أو صورة" data-testid="add-media" onClick={() => { setBusy(null); setMenu(true); }}
-        className="absolute end-3 top-1/2 z-10 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-2xl bg-white text-3xl font-light leading-none text-black shadow-lg active:scale-95">
-        <Plus size={28} strokeWidth={2} />
+    <div onClick={(e) => e.stopPropagation()}>
+      <button type="button" aria-label="أضف فيديو أو صورة" data-testid="add-media" onClick={() => { setBusy(null); setMenu(true); }} style={style}
+        className="absolute z-10 grid h-11 w-11 place-items-center rounded-lg bg-white text-black shadow-lg active:scale-95">
+        <Plus size={26} strokeWidth={2.2} />
       </button>
       <input ref={input} type="file" accept="video/*,image/*,audio/*" multiple hidden data-testid="add-media-file"
         onChange={(e) => void onFiles(e.target.files)} />
@@ -99,6 +100,6 @@ export const AddMediaButton: React.FC = () => {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
