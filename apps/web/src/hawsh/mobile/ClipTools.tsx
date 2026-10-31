@@ -4,6 +4,9 @@
  * edit, trim, speed, volume, silence cut). The work itself is in clip-tools.ts.
  */
 import React, { useEffect, useState } from "react";
+import {
+  AudioWaveform, Copy, Gauge, Pencil, Scissors, SquareSplitHorizontal, Trash2, Volume2, X, type LucideIcon,
+} from "lucide-react";
 import { useProjectStore } from "../../stores/project-store";
 import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
@@ -16,17 +19,17 @@ import { editText } from "./add-tools";
 import { TextEditor } from "./AddSheets";
 
 type Sheet = "edit" | "trim" | "speed" | "volume" | "silence";
-interface Tool { id: string; label: string; icon: string; sheet?: Sheet; run?: (t: Target, time: number) => Promise<string | null> }
+interface Tool { id: string; label: string; icon: LucideIcon; sheet?: Sheet; run?: (t: Target, time: number) => Promise<string | null> }
 
 const TOOLS: Tool[] = [
-  { id: "edit", label: "تعديل", icon: "✎", sheet: "edit" },
-  { id: "split", label: "تقسيم", icon: "⫼", run: splitAt },
-  { id: "trim", label: "قص", icon: "✂️", sheet: "trim" },
-  { id: "speed", label: "سرعة", icon: "⏩", sheet: "speed" },
-  { id: "volume", label: "صوت", icon: "🔊", sheet: "volume" },
-  { id: "silence", label: "قص السكتات", icon: "🤫", sheet: "silence" },
-  { id: "duplicate", label: "تكرار", icon: "⧉", run: duplicate },
-  { id: "delete", label: "حذف", icon: "🗑", run: remove },
+  { id: "edit", label: "تعديل", icon: Pencil, sheet: "edit" },
+  { id: "split", label: "تقسيم", icon: SquareSplitHorizontal, run: splitAt },
+  { id: "trim", label: "قص", icon: Scissors, sheet: "trim" },
+  { id: "speed", label: "سرعة", icon: Gauge, sheet: "speed" },
+  { id: "volume", label: "صوت", icon: Volume2, sheet: "volume" },
+  { id: "silence", label: "قص السكتات", icon: AudioWaveform, sheet: "silence" },
+  { id: "duplicate", label: "تكرار", icon: Copy, run: duplicate },
+  { id: "delete", label: "حذف", icon: Trash2, run: remove },
 ];
 
 /** Which tools fit the target: text has no media; still images have no speed or sound. */
@@ -80,13 +83,13 @@ export const ClipTools: React.FC = () => {
           {message}
         </div>
       )}
-      <nav className="flex h-16 shrink-0 items-stretch overflow-x-auto border-t border-border bg-bg-1 pb-[env(safe-area-inset-bottom)] [scrollbar-width:none]"
+      <nav className="flex h-16 shrink-0 items-stretch overflow-x-auto bg-black pb-[env(safe-area-inset-bottom)] [scrollbar-width:none]"
         dir="rtl" data-no-translate="" aria-label="أدوات اللقطة" data-testid="clip-tools">
-        <button type="button" aria-label="إلغاء التحديد" onClick={() => clearSelection()} className="flex w-11 shrink-0 items-center justify-center border-e border-border text-lg">✕</button>
+        <button type="button" aria-label="إلغاء التحديد" onClick={() => clearSelection()} className="flex w-11 shrink-0 items-center justify-center border-e border-white/10"><X size={22} strokeWidth={1.6} /></button>
         {TOOLS.filter((t) => allowed.includes(t.id)).map((t) => (
           <button key={t.id} type="button" disabled={busy} onClick={() => onTool(t)}
-            className={`flex min-w-[46px] flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-center text-[10px] leading-tight disabled:opacity-40 ${t.id === "delete" ? "text-red-400" : "text-fg-2"}`}>
-            <span className="text-lg leading-none" aria-hidden>{t.icon}</span>
+            className={`flex min-w-[52px] flex-1 flex-col items-center justify-center gap-1 px-0.5 text-center text-[11px] leading-tight disabled:opacity-40 ${t.id === "delete" ? "text-red-400" : "text-fg"}`}>
+            <t.icon size={22} strokeWidth={1.6} aria-hidden />
             {t.label}
           </button>
         ))}
@@ -98,7 +101,7 @@ export const ClipTools: React.FC = () => {
             className="rounded-t-2xl border-t border-border bg-bg p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm font-bold">{TOOLS.find((t) => t.sheet === sheet)?.label}</span>
-              <button type="button" aria-label="إغلاق" onClick={() => setSheet(null)} className="grid h-8 w-8 place-items-center rounded-full text-lg">✕</button>
+              <button type="button" aria-label="إغلاق" onClick={() => setSheet(null)} className="grid h-8 w-8 place-items-center rounded-full"><X size={20} /></button>
             </div>
             {sheet === "edit" && target.kind === "text-clip" && (
               <TextEditor key={target.id} initial={target.text} onSave={(text) => { if (editText(target.id, text)) setSheet(null); else setMessage(FAILED); }} />

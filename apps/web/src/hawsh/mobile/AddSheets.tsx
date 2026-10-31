@@ -3,6 +3,7 @@
  * from the phone or the Director's Eyes library at the end of the main track.
  */
 import React, { useRef, useState } from "react";
+import { Clapperboard, Plus, Smartphone } from "lucide-react";
 import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
 import { HAWSH_EDITOR_PAGE } from "../config";
@@ -73,7 +74,7 @@ export const AddMediaButton: React.FC = () => {
     <>
       <button type="button" aria-label="أضف فيديو أو صورة" data-testid="add-media" onClick={() => { setBusy(null); setMenu(true); }}
         className="absolute end-3 top-1/2 z-10 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-2xl bg-white text-3xl font-light leading-none text-black shadow-lg active:scale-95">
-        +
+        <Plus size={28} strokeWidth={2} />
       </button>
       <input ref={input} type="file" accept="video/*,image/*,audio/*" multiple hidden data-testid="add-media-file"
         onChange={(e) => void onFiles(e.target.files)} />
@@ -83,15 +84,15 @@ export const AddMediaButton: React.FC = () => {
           <div role="dialog" aria-modal="true" aria-label="إضافة" onClick={(e) => e.stopPropagation()} dir="rtl" data-no-translate=""
             className="space-y-2 rounded-t-2xl border-t border-border bg-bg p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
             <button type="button" className={option} disabled={!!busy && busy.startsWith("جارٍ")} onClick={() => input.current?.click()}>
-              <span className="text-2xl" aria-hidden>📱</span><span><b className="block">من جهازي</b><span className="text-xs text-fg-muted">فيديو أو صورة أو صوت من الألبوم أو الملفات</span></span>
+              <Smartphone size={26} strokeWidth={1.6} className="shrink-0" aria-hidden /><span><b className="block">من جهازي</b><span className="text-xs text-fg-muted">فيديو أو صورة أو صوت من الألبوم أو الملفات</span></span>
             </button>
             {status === "ready" ? (
               <button type="button" className={option} onClick={() => { setMenu(false); setLibrary(true); }}>
-                <span className="text-2xl" aria-hidden>🎬</span><span><b className="block">من مكتبة عيون المخرج</b><span className="text-xs text-fg-muted">توليداتك ومراجعك</span></span>
+                <Clapperboard size={26} strokeWidth={1.6} className="shrink-0" aria-hidden /><span><b className="block">من مكتبة عيون المخرج</b><span className="text-xs text-fg-muted">توليداتك ومراجعك</span></span>
               </button>
             ) : (
               <a href={HAWSH_EDITOR_PAGE} className={option}>
-                <span className="text-2xl" aria-hidden>🎬</span><span><b className="block">مكتبة عيون المخرج</b><span className="text-xs text-fg-muted">{status === "connecting" ? "جارٍ الاتصال…" : "تشتغل لما تفتح المحرر من عيون المخرج"}</span></span>
+                <Clapperboard size={26} strokeWidth={1.6} className="shrink-0" aria-hidden /><span><b className="block">مكتبة عيون المخرج</b><span className="text-xs text-fg-muted">{status === "connecting" ? "جارٍ الاتصال…" : "تشتغل لما تفتح المحرر من عيون المخرج"}</span></span>
               </a>
             )}
             {busy && <p className="pt-1 text-center text-sm text-fg-muted" role="status">{busy}</p>}
