@@ -1,5 +1,5 @@
 import React from "react";
-import { SIMPLE_EDITOR, SKIP_WELCOME } from "../../hawsh/simple";
+import { DARK_ONLY, SIMPLE_EDITOR, SKIP_WELCOME } from "../../hawsh/simple";
 import {
   ToolcraftDropdownMenu as DropdownMenu,
   ToolcraftIconButton as IconButton,
@@ -158,6 +158,7 @@ export const EditorActionRail: React.FC = () => {
 
       <div className="flex-1" />
 
+      {!DARK_ONLY && (
       <Tooltip content={themeActionLabel} placement="end">
         <IconButton
           label={themeActionLabel}
@@ -167,6 +168,7 @@ export const EditorActionRail: React.FC = () => {
           onClick={toggleTheme}
         />
       </Tooltip>
+      )}
 
       <DropdownMenu
         placement="end"

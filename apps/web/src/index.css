@@ -261,9 +261,10 @@
   unicode-bidi: plaintext;
 }
 
-/* Phone editor (src/hawsh/mobile): Director's Eyes gold instead of the OpenReel emerald (owner,
-   2026-10-31). Dark text on gold: buttons use text-primary-foreground. */
-.hawsh-mobile.dark {
+/* Director's Eyes gold instead of the OpenReel emerald, phone and computer alike (owner, 2026-10-31;
+   always dark, see DARK_ONLY in src/hawsh/simple.ts). Outside @layer, so it wins over the theme blocks. */
+.dark,
+[data-theme="dark"] {
   --primary: 46 94% 54%;
   --primary-foreground: 0 0% 8%;
   --accent: #f8c61c;
@@ -272,4 +273,10 @@
   --accent-fg: #141414;
   --accent-glow: rgb(248 198 28 / 0.45);
   --selected: rgb(248 198 28 / 0.25);
+}
+
+/* White text was written for emerald; on gold it needs to be dark. */
+.dark .bg-primary.text-white,
+.dark .bg-accent.text-white {
+  color: hsl(var(--primary-foreground));
 }

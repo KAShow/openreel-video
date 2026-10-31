@@ -1,30 +1,19 @@
 import "../../test/install-local-storage-mock";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { useThemeStore } from "../../stores/theme-store";
 import { EditorActionRail } from "./EditorActionRail";
 
 describe("EditorActionRail", () => {
-  beforeEach(() => {
-    useThemeStore.getState().setMode("light");
-  });
-
   afterEach(() => cleanup());
 
-  it("exposes theme switching as a visible rail action", () => {
+  it("has no theme switch: the editor is always dark (DARK_ONLY)", () => {
     render(<EditorActionRail />);
+    expect(screen.queryByRole("button", { name: /^Theme:/ })).toBeNull();
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Theme: Light. Switch to Dark",
-      }),
-    );
-
+    useThemeStore.getState().setMode("light");
     expect(useThemeStore.getState().mode).toBe("dark");
-    expect(
-      screen.getByRole("button", {
-        name: "Theme: Dark. Switch to System",
-      }),
-    ).toBeInTheDocument();
+    expect(useThemeStore.getState().isDark).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
 });

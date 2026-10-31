@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { DARK_ONLY } from "../hawsh/simple";
 
 export type ThemeMode = "light" | "dark" | "auto";
 
@@ -18,6 +19,7 @@ const getSystemTheme = (): "light" | "dark" => {
 };
 
 const calculateIsDark = (mode: ThemeMode): boolean => {
+  if (DARK_ONLY) return true;
   if (mode === "auto") {
     return getSystemTheme() === "dark";
   }
@@ -27,10 +29,11 @@ const calculateIsDark = (mode: ThemeMode): boolean => {
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
-      mode: "light",
-      isDark: false,
+      mode: DARK_ONLY ? "dark" : "light",
+      isDark: DARK_ONLY,
 
-      setMode: (mode: ThemeMode) => {
+      setMode: (requested: ThemeMode) => {
+        const mode = DARK_ONLY ? "dark" : requested;
         const isDark = calculateIsDark(mode);
         set({ mode, isDark });
 
@@ -58,6 +61,7 @@ export const useThemeStore = create<ThemeState>()(
       name: "openreel-theme",
       onRehydrateStorage: () => (state) => {
         if (state) {
+          if (DARK_ONLY) state.mode = "dark";
           const isDark = calculateIsDark(state.mode);
           state.isDark = isDark;
           if (isDark) {
