@@ -109,3 +109,7 @@ xcuserdata/
 .codex-audit/
 .codex/
 **/local.properties
+
+# Local tool caches
+.npm-cache/
+.claude/
