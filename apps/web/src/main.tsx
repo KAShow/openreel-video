@@ -8,8 +8,6 @@ import "./index.css";
 import { AstryxProvider } from "./components/astryx/AstryxProvider";
 import { registerServiceWorker } from "./services/service-worker";
 import { initCustomFonts } from "./components/editor/inspector/font-options";
-import { setEncoderBackendFactory } from "@openreel/core";
-import { NativeFFmpegBackend } from "./services/native-ffmpeg-backend";
 import { takeHandoff } from "./hawsh/handoff";
 import { initHawsh } from "./hawsh/session";
 import { startArabicUi } from "./hawsh/i18n/dom";
@@ -25,14 +23,20 @@ const isDesktop =
   typeof window !== "undefined" && window.openreel?.platform === "desktop";
 
 if (isDesktop) {
-  setEncoderBackendFactory(
-    () =>
-      new NativeFFmpegBackend(
-        () =>
-          (window as { __openreelExportPath?: string }).__openreelExportPath ??
-          "",
-      ),
-  );
+  // Desktop-only: keep the encoder stack out of the web entry chunk.
+  void Promise.all([
+    import("@openreel/core"),
+    import("./services/native-ffmpeg-backend"),
+  ]).then(([core, { NativeFFmpegBackend }]) => {
+    core.setEncoderBackendFactory(
+      () =>
+        new NativeFFmpegBackend(
+          () =>
+            (window as { __openreelExportPath?: string }).__openreelExportPath ??
+            "",
+        ),
+    );
+  });
 }
 
 // Director's Eyes sign-in: strip the one-time code from the address bar before the router reads the hash.
