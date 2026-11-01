@@ -16,7 +16,44 @@
     <title>Director's Eyes Editor — Hawsh Khalifa</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Critical CSS for the loading screen (src/components/SplashScreen.tsx reuses these classes).
+         Inline so it paints before the 2MB script arrives. The editor is always dark (DARK_ONLY). -->
+    <style>
+      html, body { margin: 0; background: #0a0b0d; }
+      .ds-splash { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 24px; background: #0a0b0d; color: #8b8f98; font-family: "Cairo", "Inter", system-ui, sans-serif; text-align: center; }
+      .ds-mark { width: 60px; height: 60px; color: #f8c61c; }
+      .ds-mark .ds-rays { transform-origin: 245px 245px; animation: ds-shutter 6s linear infinite; }
+      .ds-track { position: relative; width: min(220px, 60vw); height: 2px; border-radius: 2px; background: rgb(255 255 255 / 0.1); direction: ltr; }
+      .ds-fill { position: absolute; inset: 0; border-radius: 2px; background: #f8c61c; transform-origin: left center; transform: scaleX(var(--p, 0.3)); transition: transform 0.45s ease-out; }
+      .ds-fill::after { content: ""; position: absolute; right: -1px; top: -5px; width: 2px; height: 12px; border-radius: 1px; background: #f8c61c; box-shadow: 0 0 10px rgb(248 198 28 / 0.7); }
+      .ds-track[data-indeterminate] .ds-fill { animation: ds-scan 1.6s ease-in-out infinite; }
+      .ds-status { margin: 0; min-height: 1.5em; font-size: 14px; line-height: 1.5; }
+      .ds-error { max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+      .ds-error h1 { margin: 0; font-size: 17px; font-weight: 700; color: #f2f3f5; }
+      .ds-error p { margin: 0; font-size: 12px; line-height: 1.6; color: #8b8f98; word-break: break-word; }
+      .ds-btn { margin-top: 6px; padding: 9px 22px; border: 0; border-radius: 8px; background: #f8c61c; color: #141414; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+      .ds-btn:hover { background: #e0ad00; }
+      .ds-btn:focus-visible { outline: 2px solid #f8c61c; outline-offset: 3px; }
+      @keyframes ds-shutter { to { transform: rotate(360deg); } }
+      @keyframes ds-scan { 0% { transform: scaleX(0.05); } 60% { transform: scaleX(0.85); } 100% { transform: scaleX(1); opacity: 0.2; } }
+      @media (prefers-reduced-motion: reduce) {
+        .ds-mark .ds-rays, .ds-track[data-indeterminate] .ds-fill { animation: none; }
+        .ds-fill { transition: none; }
+      }
+    </style>
+    <div id="root">
+      <div class="ds-splash" role="status" aria-live="polite">
+        <svg class="ds-mark" viewBox="0 0 490 490" fill="none" aria-hidden="true">
+          <circle cx="245" cy="245" r="220.5" stroke="currentColor" stroke-opacity="0.25" stroke-width="30"/>
+          <g class="ds-rays" stroke="currentColor" stroke-width="24.5" stroke-linecap="round">
+            <path d="M245 98v73.5M392 245h-73.5M245 392v-73.5M98 245h73.5M348.9 141.1l-52 52M348.9 348.9l-52-52M141.1 348.9l52-52M141.1 141.1l52 52"/>
+          </g>
+          <circle cx="245" cy="245" r="49" fill="currentColor"/>
+        </svg>
+        <div class="ds-track" data-indeterminate><div class="ds-fill"></div></div>
+        <p class="ds-status">نفتح المحرر…</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

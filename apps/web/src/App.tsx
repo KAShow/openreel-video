@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useRef, useState, lazy, Suspense } from "react";
 import { ToastContainer } from "./components/Toast";
 import { MobileBlocker } from "./components/MobileBlocker";
+import { SplashScreen } from "./components/SplashScreen";
 import { WelcomeScreen } from "./components/welcome";
 import { RecoveryDialog } from "./components/welcome/RecoveryDialog";
 import { useUIStore } from "./stores/ui-store";
@@ -11,7 +12,6 @@ import { useKieAIPoller } from "./hooks/useKieAIPoller";
 import { SKIP_WELCOME } from "./hawsh/simple";
 import { DEFAULT_PROJECT_SETTINGS } from "./stores/project/project-helpers";
 import { SOCIAL_MEDIA_PRESETS, type SocialMediaCategory } from "@openreel/core";
-import { ToolcraftText as Text } from "@openreel/ui";
 
 const EditorInterface = lazy(() =>
   import("./components/editor/EditorInterface").then((m) => ({
@@ -26,12 +26,6 @@ const SearchModal = lazy(() =>
 );
 const SharePage = lazy(() =>
   import("./pages/SharePage").then((m) => ({ default: m.SharePage })),
-);
-const LoadingSpinner: React.FC<{ message: string }> = ({ message }) => (
-  <div className="h-screen w-screen bg-background flex flex-col items-center justify-center">
-    <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin mb-3" />
-    <Text type="supporting" color="secondary" className="text-sm text-text-secondary">{message}</Text>
-  </div>
 );
 
 const PRESET_DIMENSIONS: Record<string, SocialMediaCategory> = {
@@ -161,15 +155,15 @@ function App() {
     <div className="h-screen h-[100dvh] w-screen bg-background text-text-primary overflow-hidden">
       <MobileBlocker />
       {isSharePage ? (
-        <Suspense fallback={<LoadingSpinner message="Loading shared video..." />}>
+        <Suspense fallback={<SplashScreen status="نفتح الفيديو…" />}>
           <SharePage shareId={params.shareId!} />
         </Suspense>
       ) : showWelcome ? (
         <WelcomeScreen initialTab={initialTab} />
       ) : !hasOpenProject || route === "new" ? (
-        <LoadingSpinner message={isChecking ? "Checking for saved projects..." : showDialog ? "Choose a saved project or start fresh..." : "Opening project..."} />
+        <SplashScreen status={isChecking ? "نبحث عن مشاريعك المحفوظة…" : showDialog ? "اختر مشروعًا محفوظًا أو ابدأ من جديد" : "نفتح المشروع…"} />
       ) : (
-        <Suspense fallback={<LoadingSpinner message="Loading editor..." />}>
+        <Suspense fallback={<SplashScreen status="نفتح المحرر…" />}>
           <EditorInterface />
         </Suspense>
       )}
