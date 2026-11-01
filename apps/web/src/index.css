@@ -267,6 +267,7 @@
 [data-theme="dark"] {
   --primary: 46 94% 54%;
   --primary-foreground: 0 0% 8%;
+  --ring: 46 94% 54%;
   --accent: #f8c61c;
   --accent-strong: #e0ad00;
   --accent-soft: rgb(248 198 28 / 0.2);
