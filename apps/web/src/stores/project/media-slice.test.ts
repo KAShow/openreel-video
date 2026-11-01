@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createStore } from "zustand/vanilla";
 import type { MediaItem, Project } from "@openreel/core";
-import type { ProjectState } from "../project-store";
+import type { ProjectState } from "./types";
 import { createEmptyProject } from "./project-helpers";
 import { createMediaSlice } from "./media-slice";
 

@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import type { StoreApi } from "zustand";
 import type { Action, Project } from "@openreel/core";
 import { withUniversalTracksCapability } from "@openreel/core";
-import type { ProjectState } from "../project-store";
+import type { ProjectState } from "./types";
 
 type Get = StoreApi<ProjectState>["getState"];
 type Set = StoreApi<ProjectState>["setState"];

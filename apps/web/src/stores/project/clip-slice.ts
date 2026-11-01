@@ -2,7 +2,7 @@ import { cloneProjectForEdit } from "./clone-project-for-edit";
 import { v4 as uuidv4 } from "uuid";
 import type { StoreApi } from "zustand";
 import type { Action, ActionResult } from "@openreel/core";
-import type { ProjectState } from "../project-store";
+import type { ProjectState } from "./types";
 import { calculateTimelineDuration } from "./index";
 import { extractAudioTracks } from "../../services/separate-audio";
 import { saveMediaBlob, deleteMediaBlob } from "../../services/media-storage";

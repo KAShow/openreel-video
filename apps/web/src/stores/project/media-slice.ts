@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import type { StoreApi } from "zustand";
 import type { Action, MediaItem } from "@openreel/core";
-import type { ProjectState } from "../project-store";
+import type { ProjectState } from "./types";
 import { getMediaBridge, initializeMediaBridge } from "../../bridges/media-bridge";
 import { saveMediaBlob, deleteMediaBlob } from "../../services/media-storage";
 import { toast } from "../notification-store";
