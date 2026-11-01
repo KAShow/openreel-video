@@ -93,6 +93,21 @@ describe("EffectsBridge initialization lifetime", () => {
     expect(engines.instances[1].dispose).not.toHaveBeenCalled();
   });
 
+  it("does not log expected disposal from detached background initialization", async () => {
+    const complete = deferredInitialization();
+    getEffectsBridge();
+    const cancelled = expect(initializeEffectsBridge()).rejects.toThrow(
+      "disposed during initialization",
+    );
+
+    disposeEffectsBridge();
+    complete();
+    await cancelled;
+    await Promise.resolve();
+
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
   it("allows retry after initialization fails", async () => {
     engines.initialize.mockRejectedValueOnce(new Error("GPU setup failed"));
     await expect(initializeEffectsBridge()).rejects.toThrow("GPU setup failed");

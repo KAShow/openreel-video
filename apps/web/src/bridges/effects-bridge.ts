@@ -1338,6 +1338,15 @@ export function getEffectsBridge(): EffectsBridge {
     effectsBridgeInstance
       .initialize(lastInitWidth, lastInitHeight)
       .catch((error) => {
+        // Disposal is the normal cancellation path when the editor unmounts
+        // while GPU setup is still pending. Explicit initialization callers
+        // still receive the rejection; only the detached background log is muted.
+        if (
+          error instanceof Error &&
+          error.message.endsWith("EffectsBridge was disposed during initialization")
+        ) {
+          return;
+        }
         console.error(
           "[EffectsBridge] Background initialization failed:",
           error,
