@@ -51,7 +51,7 @@ function App() {
   const hasHandledInitialRoute = useRef(false);
   useKieAIPoller();
   const showWelcome =
-    !SKIP_WELCOME && ["welcome", "templates", "recent"].includes(route) && !skipWelcomeScreen;
+    !SKIP_WELCOME && ["welcome", "templates", "recent"].includes(route);
   const isSharePage = route === "share" && params.shareId;
 
   useEffect(() => {
@@ -172,7 +172,7 @@ function App() {
         {(hasOpenedScriptView || activeModal === "scriptView") && <ScriptViewDialog isOpen={activeModal === "scriptView"} onClose={closeModal} />}
         {activeModal === "search" && <SearchModal isOpen onClose={closeModal} />}
       </Suspense>
-      {showDialog && availableSaves.length > 0 && (
+      {showDialog && !showWelcome && availableSaves.length > 0 && (
         <RecoveryDialog
           saves={availableSaves}
           onRecover={async (saveId) => {

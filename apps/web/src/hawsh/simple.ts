@@ -28,9 +28,8 @@ export const HIDDEN_INSPECTOR_SECTIONS: ReadonlySet<string> = new Set([
  *  screen/camera recording, custom export settings, developer panels. */
 export const SIMPLE_EDITOR = true;
 
-/** No welcome screen (owner's decision 2026-10-30): the editor opens straight into a vertical
- *  project. The screen stays in code; its links (#/welcome, #/templates, #/recent) open the editor. */
-export const SKIP_WELCOME = true;
+/** Open the simple personal start screen first. The editor opens after creating or opening a project. */
+export const SKIP_WELCOME = false;
 
 /** The editor tour no longer pops up on first open (owner's decision 2026-10-30). It still opens
  *  from the menu ("Editor tour"). */

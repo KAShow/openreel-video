@@ -1,23 +1,13 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from "react";
-import {
-  Clock,
-  Layers,
-  ArrowRight,
-  Smartphone,
-  Monitor,
-  Square,
-  FolderOpen,
-} from "@/icons/lucide-compat";
-import { ToolcraftSwitchControl } from "@openreel/ui";
+import { ArrowRight, Clock, Plus } from "@/icons/lucide-compat";
 import { ToolcraftButton as Button } from "@openreel/ui";
-import { ToolcraftClickableCard as ClickableCard } from "@openreel/ui";
 import { ToolcraftText as Text } from "@openreel/ui";
 import { useProjectStore } from "../../stores/project-store";
-import { useUIStore } from "../../stores/ui-store";
-import { SOCIAL_MEDIA_PRESETS, type SocialMediaCategory } from "@openreel/core";
+import { SOCIAL_MEDIA_PRESETS } from "@openreel/core";
 import { useRouter } from "../../hooks/use-router";
 import { useEditorPreload } from "../../hooks/useEditorPreload";
 import { useAnalytics, AnalyticsEvents } from "../../hooks/useAnalytics";
+import { useHawshStore } from "../../hawsh/session";
 
 const TemplateGallery = lazy(() =>
   import("./TemplateGallery").then((module) => ({ default: module.TemplateGallery })),
@@ -26,47 +16,8 @@ const RecentProjects = lazy(() =>
   import("./RecentProjects").then((module) => ({ default: module.RecentProjects })),
 );
 
-const LoadingView = () => <div role="status" className="p-6 text-center text-text-secondary">Loading…</div>;
-
-interface FormatOption {
-  id: string;
-  preset: SocialMediaCategory;
-  label: string;
-  description: string;
-  dimensions: string;
-  icon: React.ElementType;
-  gradient: string;
-}
-
-const FORMAT_OPTIONS: FormatOption[] = [
-  {
-    id: "vertical",
-    preset: "tiktok",
-    label: "Vertical",
-    description: "TikTok, Reels, Shorts",
-    dimensions: "1080 × 1920",
-    icon: Smartphone,
-    gradient: "from-emerald-500/20 to-teal-500/20",
-  },
-  {
-    id: "horizontal",
-    preset: "youtube-video",
-    label: "Horizontal",
-    description: "YouTube, Vimeo, Web",
-    dimensions: "1920 × 1080",
-    icon: Monitor,
-    gradient: "from-blue-500/20 to-cyan-500/20",
-  },
-  {
-    id: "square",
-    preset: "instagram-post",
-    label: "Square",
-    description: "Instagram, Facebook",
-    dimensions: "1080 × 1080",
-    icon: Square,
-    gradient: "from-orange-500/20 to-rose-500/20",
-  },
-];
+const LoadingView = () => <div role="status" className="p-6 text-center text-text-secondary">جاري التحميل…</div>;
+const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 const OpenReelLogo: React.FC<{ className?: string }> = ({ className = "" }) => (
   <svg
@@ -144,38 +95,32 @@ interface WelcomeScreenProps {
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
-  const setSkipWelcomeScreen = useUIStore(
-    (state) => state.setSkipWelcomeScreen,
-  );
-  const skipWelcomeScreen = useUIStore((state) => state.skipWelcomeScreen);
   const createNewProject = useProjectStore((state) => state.createNewProject);
+  const email = useHawshStore((state) => state.email);
   const { navigate } = useRouter();
   const { track } = useAnalytics();
 
   const [viewMode, setViewMode] = useState<ViewMode>(initialTab ?? "home");
-  const [hoveredFormat, setHoveredFormat] = useState<string | null>(null);
+  const displayName = email?.split("@")[0];
 
   useEditorPreload(true);
 
-  const handleCreateProject = useCallback(
-    (option: FormatOption) => {
-      const preset = SOCIAL_MEDIA_PRESETS[option.preset];
-      createNewProject(`New ${option.label} Video`, {
-        width: preset.width,
-        height: preset.height,
-        frameRate: preset.frameRate,
-      });
-      track(AnalyticsEvents.PROJECT_CREATED, {
-        preset: option.preset,
-        width: preset.width,
-        height: preset.height,
-        frameRate: preset.frameRate ?? 30,
-        source: "quick_start",
-      });
-      navigate("editor");
-    },
-    [createNewProject, navigate, track],
-  );
+  const handleCreateProject = useCallback(() => {
+    const preset = SOCIAL_MEDIA_PRESETS.tiktok;
+    createNewProject("مشروع جديد", {
+      width: preset.width,
+      height: preset.height,
+      frameRate: preset.frameRate,
+    });
+    track(AnalyticsEvents.PROJECT_CREATED, {
+      preset: "tiktok",
+      width: preset.width,
+      height: preset.height,
+      frameRate: preset.frameRate ?? 30,
+      source: "quick_start",
+    });
+    navigate("editor");
+  }, [createNewProject, navigate, track]);
 
   const handleTemplateApplied = useCallback(() => {
     navigate("editor");
@@ -184,12 +129,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
   const handleProjectSelected = useCallback(() => {
     navigate("editor");
   }, [navigate]);
-
-  useEffect(() => {
-    if (skipWelcomeScreen) {
-      navigate("editor");
-    }
-  }, [skipWelcomeScreen, navigate]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -230,178 +169,104 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
 
   if (viewMode === "recent") {
     return (
-      <div className="fixed inset-0 z-50 bg-background flex flex-col">
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <Button
-            label="Back"
-            variant="ghost"
-            size="sm"
-            icon={<ArrowRight className="rotate-180" size={16} aria-hidden />}
-            onClick={() => setViewMode("home")}
-          />
-          <Text type="label" color="primary" weight="medium" className="text-sm text-text-primary">
-            Recent Projects
-          </Text>
-          <div className="w-16" />
+      <div dir="rtl" data-ar className="fixed inset-0 z-50 flex flex-col bg-background">
+        <header className="relative z-10 border-b border-border bg-background/95 backdrop-blur-xl">
+          <div className="mx-auto flex h-[72px] w-full max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="h-9 w-9 shrink-0 text-primary">
+                <OpenReelLogo className="h-full w-full" />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-text-primary">Director's Eyes</div>
+                <div className="mt-0.5 text-[11px] text-text-muted">مشاريعك تبدأ من هنا</div>
+              </div>
+            </div>
+            <Button
+              label="مشروع جديد"
+              variant="primary"
+              icon={<Plus size={17} aria-hidden />}
+              onClick={handleCreateProject}
+              className="shrink-0 rounded-xl shadow-glow"
+            />
+          </div>
         </header>
-        <div className="flex-1 overflow-y-auto p-6">
-          <Suspense fallback={<LoadingView />}>
-            <RecentProjects onProjectSelected={handleProjectSelected} />
-          </Suspense>
-        </div>
+        <main className="relative flex-1 overflow-y-auto">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-[radial-gradient(ellipse_at_top,var(--accent-soft),transparent_65%)] opacity-30" />
+          <div className="relative mx-auto w-full max-w-[1440px] px-4 py-7 sm:px-6 sm:py-10 lg:px-10">
+            <Suspense fallback={<LoadingView />}>
+              <RecentProjects
+                onProjectSelected={handleProjectSelected}
+                onCreateProject={handleCreateProject}
+              />
+            </Suspense>
+          </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-background overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(34,197,94,0.05),transparent_60%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(34,197,94,0.03),transparent_50%)]" />
-
-      <div className="relative h-full flex flex-col items-center justify-center px-6">
-        <div className="w-full max-w-3xl">
-          <div className="flex flex-col items-center text-center mb-12">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 text-primary">
-                <OpenReelLogo className="w-full h-full" />
-              </div>
-              <div className="flex flex-col items-start">
-                <Text type="body" color="primary" weight="semibold" className="text-xl text-text-primary tracking-tight">
-                  Director's Eyes Editor
-                </Text>
-                {/* MIT attribution: this editor is a modified OpenReel (see /LICENSE.txt). */}
-                <a href="/LICENSE.txt" target="_blank" rel="noopener noreferrer" className="text-xs text-text-secondary hover:underline">
-                  by Hawsh Khalifa · built on OpenReel
-                </a>
-              </div>
-            </div>
-
-            <Text type="body" color="primary" weight="bold" className="text-4xl sm:text-5xl text-text-primary tracking-tight mb-3">
-              From idea to export.
-            </Text>
-            <Text type="supporting" color="secondary" className="text-xl text-text-secondary mb-8">
-              In your browser.
-            </Text>
-            <Text type="supporting" color="secondary" className="text-base text-text-muted max-w-md">
-              Pick a format and start creating. You can change this anytime.
-            </Text>
+    <div dir="rtl" data-ar className="fixed inset-0 z-50 overflow-y-auto bg-background">
+      <header className="mx-auto flex h-20 w-full max-w-5xl items-center justify-between px-5 sm:px-8">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 text-primary">
+            <OpenReelLogo className="h-full w-full" />
           </div>
-
-          <div className="grid grid-cols-3 gap-4 mb-10">
-            {FORMAT_OPTIONS.map((option) => {
-              const Icon = option.icon;
-              const isHovered = hoveredFormat === option.id;
-
-              return (
-                <ClickableCard
-                  key={option.id}
-                  label={`Create ${option.label} project`}
-                  onClick={() => handleCreateProject(option)}
-                  onMouseEnter={() => setHoveredFormat(option.id)}
-                  onMouseLeave={() => setHoveredFormat(null)}
-                  padding={6}
-                  variant="muted"
-                  className={`
-                    group relative flex flex-col items-center p-6 rounded-2xl
-                    bg-background-secondary border border-border
-                    hover:border-primary/40 hover:bg-background-tertiary
-                    transition-all duration-200
-                    ${isHovered ? "scale-[1.02] shadow-lg shadow-primary/5" : ""}
-                  `}
-                >
-                  <div
-                    className={`
-                    absolute inset-0 rounded-2xl bg-gradient-to-br ${option.gradient}
-                    opacity-0 group-hover:opacity-100 transition-opacity duration-300
-                  `}
-                  />
-
-                  <div className="relative z-10 flex flex-col items-center">
-                    <div
-                      className={`
-                      w-16 h-16 mb-4 rounded-xl flex items-center justify-center
-                      bg-background-tertiary group-hover:bg-primary/10
-                      transition-colors duration-200
-                    `}
-                    >
-                      <Icon
-                        size={28}
-                        className="text-text-muted group-hover:text-primary transition-colors"
-                      />
-                    </div>
-
-                    <Text type="body" color="primary" weight="semibold" className="text-lg text-text-primary mb-1">
-                      {option.label}
-                    </Text>
-                    <Text type="supporting" color="secondary" className="text-sm text-text-muted mb-3">
-                      {option.description}
-                    </Text>
-                    <span className="text-xs font-mono text-text-muted/70 bg-background-tertiary px-2 py-1 rounded">
-                      {option.dimensions}
-                    </span>
-                  </div>
-
-                  <div
-                    className={`
-                    absolute bottom-4 left-1/2 -translate-x-1/2
-                    flex items-center gap-1 text-sm font-medium text-primary
-                    opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0
-                    transition-all duration-200
-                  `}
-                  >
-                    Start creating
-                    <ArrowRight size={14} />
-                  </div>
-                </ClickableCard>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center justify-center gap-3">
-            <Button
-              label="Browse templates"
-              variant="secondary"
-              icon={<Layers size={16} aria-hidden />}
-              onClick={() => setViewMode("templates")}
-              className="rounded-xl"
-            />
-            <Button
-              label="Recent projects"
-              variant="secondary"
-              icon={<Clock size={16} aria-hidden />}
-              onClick={() => setViewMode("recent")}
-              className="rounded-xl"
-            />
-            <Button
-              label="Open editor"
-              variant="secondary"
-              icon={<FolderOpen size={16} aria-hidden />}
-              onClick={() => navigate("editor")}
-              className="rounded-xl"
-            />
+          <div>
+            <div className="text-sm font-semibold text-text-primary">محرر عيون المخرج</div>
+            {/* MIT attribution: this editor is a modified OpenReel (see /LICENSE.txt). */}
+            <a
+              href="/LICENSE.txt"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-0.5 block text-[11px] text-text-muted hover:text-text-secondary"
+            >
+              مبني على OpenReel
+            </a>
           </div>
         </div>
-
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <ToolcraftSwitchControl
-              label="Skip on startup"
-              checked={skipWelcomeScreen}
-              onCheckedChange={setSkipWelcomeScreen}
-            />
+        {displayName && (
+          <div className="flex items-center gap-2 text-xs text-text-secondary" title={email ?? undefined}>
+            <span className="hidden max-w-32 truncate sm:block">{displayName}</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background-secondary text-xs font-semibold text-primary">
+              {Array.from(displayName)[0]?.toUpperCase()}
+            </span>
           </div>
+        )}
+      </header>
 
-          <span className="text-text-muted/30">·</span>
-
-          <Text type="supporting" color="secondary" className="text-xs text-text-muted/60">
-            Press{" "}
-            <kbd className="px-1.5 py-0.5 bg-background-tertiary border border-border rounded text-text-muted font-mono text-[10px]">
-              Esc
-            </kbd>{" "}
-            to skip
-          </Text>
+      <main className="mx-auto flex min-h-[calc(100dvh-5rem)] w-full max-w-md flex-col justify-center px-5 py-10 sm:px-8 sm:py-14">
+        <div className="text-center">
+          <p className="text-sm font-medium text-primary">
+            مرحبًا{displayName ? `، ${displayName}` : " بك"}
+          </p>
+          <h1 className="mt-3 text-3xl font-semibold leading-tight text-text-primary sm:text-4xl">
+            ماذا تريد أن تصنع اليوم؟
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-text-secondary">
+            ابدأ من جديد أو تابع مشروعًا سابقًا.
+          </p>
         </div>
-      </div>
+
+        <div className="mt-10 space-y-3">
+          <button
+            type="button"
+            onClick={handleCreateProject}
+            className={`flex h-14 w-full items-center justify-center gap-3 rounded-xl bg-primary text-base font-semibold text-primary-foreground transition-colors hover:bg-primary-hover ${focusRing}`}
+          >
+            <Plus size={20} aria-hidden />
+            مشروع جديد
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("recent")}
+            className={`flex h-14 w-full items-center justify-center gap-3 rounded-xl border border-border bg-background-secondary text-base font-medium text-text-primary transition-colors hover:border-primary/40 hover:bg-background-tertiary ${focusRing}`}
+          >
+            <Clock size={19} className="text-primary" aria-hidden />
+            المشاريع السابقة
+          </button>
+        </div>
+      </main>
     </div>
   );
 };
