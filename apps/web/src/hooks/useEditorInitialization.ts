@@ -32,11 +32,13 @@ export const useEditorInitialization = () => {
   const initializing = useEngineStore((state) => state.initializing);
   const initError = useEngineStore((state) => state.initError);
   const [bridgesReady, setBridgesReady] = useState(false);
-  const [initStatus, setInitStatus] = useState("Starting...");
+  const [initStatus, setInitStatus] = useState("نفتح المحرر…");
+  const [initProgress, setInitProgress] = useState(0.05);
   const [localError, setLocalError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => {
     setLocalError(null);
+    setInitProgress(0.05);
     setBridgesReady(false);
     setAttempt((previous) => previous + 1);
   }, []);
@@ -49,7 +51,8 @@ export const useEditorInitialization = () => {
       try {
         const currentState = useEngineStore.getState();
         if (!currentState.initialized && !currentState.initializing) {
-          setInitStatus("Initializing video engine...");
+          setInitStatus("نجهّز محرك الفيديو…");
+          setInitProgress(0.1);
           await initialize();
         } else if (currentState.initializing) {
           await new Promise<void>((resolve) => {
@@ -76,19 +79,23 @@ export const useEditorInitialization = () => {
           );
         }
 
-        setInitStatus("Initializing media bridge...");
+        setInitProgress(0.35);
+        setInitStatus("نجهّز مكتبة الوسائط…");
         await initializeMediaBridge();
         if (!isMounted) return;
 
-        setInitStatus("Initializing playback bridge...");
+        setInitProgress(0.5);
+        setInitStatus("نجهّز التشغيل والصوت…");
         await initializePlaybackBridge();
         if (!isMounted) return;
 
-        setInitStatus("Initializing render bridge...");
+        setInitProgress(0.65);
+        setInitStatus("نجهّز المعاينة…");
         await initializeRenderBridge();
         if (!isMounted) return;
 
-        setInitStatus("Initializing effects bridge...");
+        setInitProgress(0.8);
+        setInitStatus("نجهّز المؤثرات…");
         const projectState = useProjectStore.getState();
         const { width, height } = projectState.project.settings;
         try {
@@ -101,7 +108,8 @@ export const useEditorInitialization = () => {
         }
         if (!isMounted) return;
 
-        setInitStatus("Initializing transition bridge...");
+        setInitProgress(0.92);
+        setInitStatus("نجهّز الانتقالات…");
         try {
           initializeTransitionBridge(width, height);
         } catch (transitionError) {
@@ -112,6 +120,7 @@ export const useEditorInitialization = () => {
         }
         if (!isMounted) return;
 
+        setInitProgress(1);
         setBridgesReady(true);
       } catch (error) {
         console.error("Failed to initialize engines/bridges:", error);
@@ -144,6 +153,7 @@ export const useEditorInitialization = () => {
     initializing: initializing || (!bridgesReady && initialized),
     initError: initError || localError,
     initStatus,
+    initProgress,
     retry,
   };
 };

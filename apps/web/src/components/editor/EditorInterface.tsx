@@ -2,7 +2,7 @@ import "./ai-workspace.css";
 import { usePhoneEditor } from "../../hawsh/mobile/phone";
 import { MobileEditor } from "../../hawsh/mobile/MobileEditor";
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { ToolcraftText as Text, ToolcraftButton as Button } from "@openreel/ui";
+import { SplashScreen } from "../SplashScreen";
 
 import { Toolbar } from "./Toolbar";
 import { EditorActionRail } from "./EditorActionRail";
@@ -90,7 +90,7 @@ export const EditorInterface: React.FC = () => {
   const phone = usePhoneEditor(); // Hawsh phone editor (src/hawsh/mobile)
   const [compactPanel, setCompactPanel] = useState<"timeline" | "media" | "inspector" | "chat">("timeline");
   const [hasOpenedChat, setHasOpenedChat] = useState(false);
-  const { initialized, initializing, initError, initStatus, retry } =
+  const { initialized, initializing, initError, initStatus, initProgress, retry } =
     useEditorInitialization();
 
   const { showShortcutsOverlay, setShowShortcutsOverlay } =
@@ -315,25 +315,7 @@ export const EditorInterface: React.FC = () => {
   }, [mediaWidth, inspectorWidth, chatWidth, timelineVh, timelineMaximized]);
 
   if (initializing || !initialized) {
-    return (
-      <div className="w-full h-full bg-bg flex items-center justify-center">
-        <div className="text-center">
-          {initError ? (
-            <div role="alert" className="max-w-md space-y-4 px-6">
-              <Text type="body" weight="bold">The editor couldn't start</Text>
-              <Text type="supporting" className="text-status-error text-xs">{initError}</Text>
-              <Button label="Try again" onClick={retry} variant="primary" />
-            </div>
-          ) : (
-            <div role="status">
-              <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <Text type="supporting" color="primary" className="text-fg-2 text-sm">Initializing editor…</Text>
-              <Text type="supporting" color="secondary" className="text-fg-muted text-xs mt-2">{initStatus}</Text>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+    return <SplashScreen status={initStatus} progress={initProgress} error={initError} onRetry={retry} />;
   }
 
   if (phone) return <MobileEditor />;
