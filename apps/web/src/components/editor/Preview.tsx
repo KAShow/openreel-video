@@ -5,29 +5,21 @@ import React, {
   useState,
   useMemo,
 } from "react";
-import { PreviewTimecode } from "./PreviewTimecode";
 import { ExportProgressOverlay } from "./ExportProgressOverlay";
-import { useProjectFonts } from "../../hooks/useProjectFonts";
-import { formatFrameTimecode } from "../../utils/frame-timecode";
+import { PreviewControls } from "./preview/PreviewControls";
+import { usePreviewAudio } from "./preview/usePreviewAudio";
+import { usePreviewRenderer } from "./preview/usePreviewRenderer";
+import { usePreviewPlayback } from "./preview/usePreviewPlayback";
 import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  VolumeX,
-  Monitor,
-  Maximize2,
-  Minimize2,
-  Move,
-  Loader2,
-  ZoomIn,
-  Proportions,
-  Magnet,
-  Repeat,
-} from "@/icons/lucide-compat";
-import { ToolcraftButton as Button } from "@openreel/ui";
-import { ToolcraftIconButton as IconButton } from "@openreel/ui";
+  STORE_UPDATE_THROTTLE_MS,
+  usePreviewInteractions,
+} from "./preview/usePreviewInteractions";
+import {
+  PreviewGuides,
+  SubtitleSelectionOverlay,
+  TransformOverlay,
+} from "./preview/PreviewOverlay";
+import { useProjectFonts } from "../../hooks/useProjectFonts";
 import { ToolcraftText as Text } from "@openreel/ui";
 import { useProjectStore } from "../../stores/project-store";
 import { previewProxyCache, usePreviewProxyStore } from "../../stores/preview-proxy-store";
@@ -35,25 +27,14 @@ import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
 import { useThemeStore } from "../../stores/theme-store";
 import { getRenderBridge } from "../../bridges/render-bridge";
-import { getEffectsBridge } from "../../bridges/effects-bridge";
 import {
-  RendererFactory,
   getCaptionWrapWidth,
-  type Renderer,
-  isWebGPUSupported,
   getSpeedEngine,
   getMasterClock,
   getRealtimeAudioGraph,
-  initializeAudioEffectsEngine,
   getPreviewAudioEffects,
-  splitProfileAwareNoiseReductionEffects,
-  resolveClipAudioEffects as resolveTimelineClipAudioEffects,
-  resolveClipVolumeAutomation,
   getParticleEngine,
   MotionRenderer,
-  type Effect,
-  type AudioEffectParams,
-  type AudioClipSchedule,
   type TextClip,
   type ShapeClip,
   type SVGClip,
@@ -62,11 +43,6 @@ import {
   type Track,
   type MotionAsset,
   type Mask,
-  type AdjustmentLayer,
-  type BlendMode,
-  type MediaItem,
-  getTrackTransitionAudioFades,
-  resolveCanvasFitDimensions,
   getMediaItemCapabilities,
   getVisibleTrackRenderOrder,
   trackHasAudioItems,
@@ -75,20 +51,17 @@ import {
 import { useEngineStore } from "../../stores/engine-store";
 import {
   type HandlePosition,
-  type InteractionMode,
   type ClipTransform,
+  type GPULayer,
   DEFAULT_TRANSFORM,
   formatTime,
-  renderTextClipToCanvas,
   getActiveTextClips,
   getActiveShapeClips,
-  renderShapeClipToCanvas,
   getActiveSubtitles,
   renderSubtitleToCanvas,
   drawFrameWithTransform,
   drawFrameWithMasks,
   applyEffectsToFrame,
-  applyEffectsToFrameCanvas,
   getTransitionAtTime,
   setImageLoadCallback,
   renderTransitionFrame,
@@ -101,7 +74,19 @@ import {
   computePreviewResolution,
   PREVIEW_MAX_DIMENSION,
   previewQualityScale,
-  PREVIEW_QUALITY_OPTIONS,
+  applyPreviewAdjustmentLayers,
+  clipNeedsFrameProcessing,
+  clipCssFilterOnly,
+  preparePreviewFrame,
+  renderAllLayersWithGPU,
+  hasBehindSubjectText,
+  getBehindSubjectStreamId,
+  createTransparentCanvasSource,
+  createTransparentImageBitmap,
+  captureSubjectFrame,
+  renderShapeClipWithEffects,
+  renderTextClipWithSubjectMask,
+  PreviewResourceManager,
 } from "./preview/index";
 import { snapCanvasPosition } from "./preview/canvas-snapping";
 import { captureNativeVideoFrame } from "./preview/video-frame";
@@ -109,180 +94,17 @@ import { resolvePlaybackLoop, resolvePlaybackStart } from "../../utils/playback-
 import { ProcessingOverlay } from "./ProcessingOverlay";
 import { editingFrameDurationMs } from "./editing-frame-rate";
 import {
-  getPersonSegmentationEngine,
   getBackgroundRemovalEngine,
-  createMotionAwareOcclusionMask,
   getStabilizedTransform,
   getVidstabEngine,
 } from "@openreel/core";
 import type {
   GSAPMotionPathPoint,
   MotionPathConfig,
-  SegmentationResult,
 } from "@openreel/core";
-
-interface GPULayer {
-  bitmap: ImageBitmap;
-  transform: ClipTransform;
-}
-
-interface PreparedPreviewFrame {
-  frame: ImageBitmap | HTMLCanvasElement | OffscreenCanvas;
-  cleanup: () => void;
-}
 
 type PreviewClip = Track["clips"][number];
 type PreviewFrameSource = Parameters<typeof drawFrameWithTransform>[1];
-type PreviewCompositeOperation =
-  CanvasRenderingContext2D["globalCompositeOperation"];
-
-const adjustmentBlendOperation = (mode: BlendMode): PreviewCompositeOperation =>
-  mode === "add" || mode === "linear-dodge"
-    ? "lighter"
-    : (mode as PreviewCompositeOperation);
-
-const applyPreviewAdjustmentLayers = async (
-  canvas: OffscreenCanvas,
-  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
-  layers: readonly AdjustmentLayer[],
-  time: number,
-): Promise<boolean> => {
-  let applied = false;
-  const effectsBridge = getEffectsBridge();
-  if (!effectsBridge.isInitialized()) return false;
-  for (const layer of layers) {
-    if (
-      !layer.enabled ||
-      layer.opacity <= 0 ||
-      time < layer.startTime ||
-      time >= layer.startTime + layer.duration
-    ) continue;
-    const effects = layer.effects.filter((effect) => effect.enabled !== false);
-    if (effects.length === 0) continue;
-    let source: ImageBitmap | null = null;
-    let processed: ImageBitmap | null = null;
-    try {
-      source = await createImageBitmap(canvas);
-      processed = await effectsBridge.processEffectList(source, effects);
-      if (processed.width <= 0 || processed.height <= 0) continue;
-      ctx.save();
-      ctx.globalAlpha = Math.max(0, Math.min(1, layer.opacity));
-      ctx.globalCompositeOperation = adjustmentBlendOperation(layer.blendMode);
-      ctx.drawImage(processed, 0, 0, canvas.width, canvas.height);
-      ctx.restore();
-      applied = true;
-    } catch (error) {
-      console.warn(`[Preview] Adjustment layer ${layer.id} failed:`, error);
-    } finally {
-      if (processed && processed !== source) processed.close();
-      source?.close();
-    }
-  }
-  return applied;
-};
-
-const clipNeedsFrameProcessing = (clipId: string): boolean => {
-  const bgEngine = getBackgroundRemovalEngine();
-  if (bgEngine?.isInitialized() && bgEngine.getSettings(clipId).enabled) {
-    return true;
-  }
-
-  const effectsBridge = getEffectsBridge();
-  if (!effectsBridge.isInitialized()) {
-    return false;
-  }
-
-  if (effectsBridge.getEffects(clipId).some((effect) => effect.enabled)) {
-    return true;
-  }
-
-  return Object.keys(effectsBridge.getColorGrading(clipId)).length > 0;
-};
-
-const clipCssFilterOnly = (clipId: string): string | null => {
-  const bgEngine = getBackgroundRemovalEngine();
-  if (bgEngine?.isInitialized() && bgEngine.getSettings(clipId).enabled) {
-    return null;
-  }
-  const effectsBridge = getEffectsBridge();
-  if (!effectsBridge.isInitialized()) {
-    return null;
-  }
-  return effectsBridge.getNativeCssFilter(clipId);
-};
-
-const preparePreviewFrame = async (
-  clipId: string,
-  frameCanvas: HTMLCanvasElement | OffscreenCanvas,
-  preferBitmap: boolean,
-  allowCanvasByRef = false,
-): Promise<PreparedPreviewFrame> => {
-  const needsProcessing = clipNeedsFrameProcessing(clipId);
-  if (!preferBitmap && !needsProcessing) {
-    return {
-      frame: frameCanvas,
-      cleanup: () => {},
-    };
-  }
-
-  let frameBitmap: ImageBitmap | null = null;
-  let processedFrame: ImageBitmap | null = null;
-
-  try {
-    frameBitmap = await createImageBitmap(frameCanvas);
-
-    if (!needsProcessing) {
-      return {
-        frame: frameBitmap,
-        cleanup: () => {
-          frameBitmap?.close();
-        },
-      };
-    }
-
-    if (allowCanvasByRef) {
-      const effectsCanvas = await applyEffectsToFrameCanvas(
-        clipId,
-        frameBitmap,
-      );
-      if (effectsCanvas) {
-        const sourceBitmap = frameBitmap;
-        return {
-          frame: effectsCanvas,
-          cleanup: () => {
-            sourceBitmap.close();
-          },
-        };
-      }
-    }
-
-    processedFrame = await applyEffectsToFrame(clipId, frameBitmap);
-    if (processedFrame === frameBitmap) {
-      return {
-        frame: frameBitmap,
-        cleanup: () => {
-          frameBitmap?.close();
-        },
-      };
-    }
-
-    return {
-      frame: processedFrame,
-      cleanup: () => {
-        processedFrame?.close();
-        frameBitmap?.close();
-      },
-    };
-  } catch {
-    processedFrame?.close();
-    frameBitmap?.close();
-
-    return {
-      frame: frameCanvas,
-      cleanup: () => {},
-    };
-  }
-};
 
 const scaleTransformPositionForPreview = (
   transform: ClipTransform,
@@ -322,61 +144,6 @@ const applyStabilizationTransform = (
   ) as ClipTransform;
 };
 
-// The WebGPU renderer maps a layer's texture onto a full-canvas quad, so a
-// scale of {1,1} stretches the source to the canvas. Bake the aspect-fit
-// ratio into the layer scale so GPU compositing letterboxes ("contain") like
-// the Canvas2D path instead of distorting mismatched-aspect clips.
-const computeFitScale = (
-  fitMode: ClipTransform["fitMode"],
-  sourceWidth: number,
-  sourceHeight: number,
-  canvasWidth: number,
-  canvasHeight: number,
-  crop?: ClipTransform["crop"],
-): { x: number; y: number } => {
-  if (canvasWidth <= 0 || canvasHeight <= 0) {
-    return { x: 1, y: 1 };
-  }
-  const visibleSourceWidth = crop ? crop.width * sourceWidth : sourceWidth;
-  const visibleSourceHeight = crop ? crop.height * sourceHeight : sourceHeight;
-  const { width: drawWidth, height: drawHeight } =
-    resolveCanvasFitDimensions(
-      fitMode,
-      visibleSourceWidth,
-      visibleSourceHeight,
-      canvasWidth,
-      canvasHeight,
-    );
-  return { x: drawWidth / canvasWidth, y: drawHeight / canvasHeight };
-};
-
-const ASPECT_PRESETS: Array<{
-  label: string;
-  width: number;
-  height: number;
-}> = [
-  { label: "16:9", width: 1920, height: 1080 },
-  { label: "9:16", width: 1080, height: 1920 },
-  { label: "1:1", width: 1080, height: 1080 },
-  { label: "4:5", width: 1080, height: 1350 },
-  { label: "4:3", width: 1440, height: 1080 },
-  { label: "21:9", width: 2560, height: 1080 },
-];
-
-const aspectLabelFor = (width: number, height: number): string => {
-  const ratio = width / height;
-  let closest = ASPECT_PRESETS[0];
-  let smallestDelta = Infinity;
-  for (const preset of ASPECT_PRESETS) {
-    const delta = Math.abs(preset.width / preset.height - ratio);
-    if (delta < smallestDelta) {
-      smallestDelta = delta;
-      closest = preset;
-    }
-  }
-  return smallestDelta < 0.01 ? closest.label : "Custom";
-};
-
 // Draws `source` cover-fit and Gaussian-blurred across the whole canvas — the
 // blurred letterbox backdrop. Called inline with the live decoded base frame
 // (ImageBitmap or video element) so it always has real pixels, then the
@@ -410,436 +177,12 @@ const drawBlurredBackdrop = (
   ctx.restore();
 };
 
-const renderFrameWithGPU = async (
-  renderer: Renderer,
-  frame: ImageBitmap,
-  transform: ClipTransform,
-  canvasWidth: number,
-  canvasHeight: number,
-): Promise<ImageBitmap | null> => {
-  try {
-    const device = renderer.getDevice();
-    if (!device) {
-      return null;
-    }
-
-    renderer.beginFrame();
-
-    const texture = renderer.createTextureFromImage(frame);
-
-    const fitScale = computeFitScale(
-      transform.fitMode,
-      frame.width,
-      frame.height,
-      canvasWidth,
-      canvasHeight,
-      transform.crop,
-    );
-    const gpuTransform = {
-      position: transform.position,
-      scale: {
-        x: transform.scale.x * fitScale.x,
-        y: transform.scale.y * fitScale.y,
-      },
-      rotation: transform.rotation,
-      anchor: transform.anchor,
-      opacity: transform.opacity,
-      borderRadius: transform.borderRadius,
-      crop: transform.crop,
-    };
-
-    renderer.renderLayer({
-      texture,
-      transform: gpuTransform,
-      effects: [],
-      opacity: transform.opacity,
-      borderRadius: transform.borderRadius || 0,
-    });
-
-    const result = await renderer.endFrame();
-    renderer.releaseTexture(texture);
-
-    return result;
-  } catch {
-    return null;
-  }
-};
-
-const renderAllLayersWithGPU = async (
-  renderer: Renderer,
-  layers: GPULayer[],
-  canvasWidth: number,
-  canvasHeight: number,
-): Promise<ImageBitmap | null> => {
-  try {
-    const device = renderer.getDevice();
-
-    if (!device || layers.length === 0) {
-      return null;
-    }
-
-    renderer.beginFrame();
-
-    const textures: ReturnType<typeof renderer.createTextureFromImage>[] = [];
-
-    for (let i = 0; i < layers.length; i++) {
-      const layer = layers[i];
-
-      const texture = renderer.createTextureFromImage(layer.bitmap);
-      textures.push(texture);
-
-      const fitScale = computeFitScale(
-        layer.transform.fitMode,
-        layer.bitmap.width,
-        layer.bitmap.height,
-        canvasWidth,
-        canvasHeight,
-        layer.transform.crop,
-      );
-      const gpuTransform = {
-        position: layer.transform.position,
-        scale: {
-          x: layer.transform.scale.x * fitScale.x,
-          y: layer.transform.scale.y * fitScale.y,
-        },
-        rotation: layer.transform.rotation,
-        anchor: layer.transform.anchor,
-        opacity: layer.transform.opacity,
-        borderRadius: layer.transform.borderRadius,
-        crop: layer.transform.crop,
-      };
-
-      renderer.renderLayer({
-        texture,
-        transform: gpuTransform,
-        effects: [],
-        opacity: layer.transform.opacity,
-        borderRadius: layer.transform.borderRadius || 0,
-      });
-    }
-
-    const result = await renderer.endFrame();
-
-    for (const texture of textures) {
-      renderer.releaseTexture(texture);
-    }
-
-    return result;
-  } catch (e) {
-    console.error("[renderAllLayersWithGPU] Error:", e);
-    return null;
-  }
-};
-
-const hasBehindSubjectText = (textClips: TextClip[]): boolean =>
-  textClips.some((textClip) => textClip.behindSubject);
-
-const getBehindSubjectStreamId = (
-  tracks: readonly Track[],
-  time: number,
-  getMediaItem: (mediaId: string) => MediaItem | undefined,
-): string => {
-  const activeSourceIds = tracks
-    .filter((track) => !track.hidden)
-    .flatMap((track) =>
-      track.clips
-        .filter(
-          (clip) =>
-            time >= clip.startTime &&
-            time < clip.startTime + clip.duration &&
-            getMediaItemCapabilities(getMediaItem(clip.mediaId)).visual,
-        )
-        .map((clip) => clip.id),
-    )
-    .sort();
-  return `editor:text-behind-subject:${activeSourceIds.join("|") || "canvas"}`;
-};
-
-const subjectMaskRequestCache = new WeakMap<
-  ImageBitmap,
-  Map<string, Promise<SegmentationResult | null>>
->();
-const subjectOcclusionMaskCache = new WeakMap<
-  ImageBitmap,
-  WeakMap<SegmentationResult, ImageData>
->();
-
-const getSubjectMaskForFrame = (
-  subjectFrame: ImageBitmap,
-  time: number,
-  realtime: boolean,
-  streamId: string,
-): Promise<SegmentationResult | null> => {
-  let requests = subjectMaskRequestCache.get(subjectFrame);
-  if (!requests) {
-    requests = new Map();
-    subjectMaskRequestCache.set(subjectFrame, requests);
-  }
-  const key = `${streamId}:${time}:${Number(realtime)}`;
-  const cached = requests.get(key);
-  if (cached) return cached;
-  const request = getPersonSegmentationEngine().getPersonMask(subjectFrame, {
-    timestampMs: time * 1000,
-    streamId,
-    realtime,
-  });
-  requests.set(key, request);
-  return request;
-};
-
-const createTransparentCanvasSource = (
-  width: number,
-  height: number,
-): HTMLCanvasElement => {
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  canvas.getContext("2d")?.clearRect(0, 0, width, height);
-  return canvas;
-};
-
-const createTransparentImageBitmap = async (
-  width: number,
-  height: number,
-): Promise<ImageBitmap | null> => {
-  try {
-    return await createImageBitmap(createTransparentCanvasSource(width, height));
-  } catch {
-    return null;
-  }
-};
-
-const captureSubjectFrame = async (
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-): Promise<ImageBitmap | null> => {
-  try {
-    return await createImageBitmap(
-      ctx.canvas as HTMLCanvasElement | OffscreenCanvas,
-      0,
-      0,
-      width,
-      height,
-    );
-  } catch {
-    return null;
-  }
-};
-
-const applySubjectOcclusionMask = (
-  textCtx: CanvasRenderingContext2D,
-  subjectFrame: ImageBitmap | null,
-  canvasWidth: number,
-  canvasHeight: number,
-  maskResult: SegmentationResult | null,
-): boolean => {
-  if (!subjectFrame || !maskResult) return false;
-
-  try {
-    const maskCanvas = new OffscreenCanvas(maskResult.width, maskResult.height);
-    const maskCtx = maskCanvas.getContext("2d");
-    if (!maskCtx) return false;
-
-    let occlusionMask = subjectOcclusionMaskCache
-      .get(subjectFrame)
-      ?.get(maskResult);
-    if (!occlusionMask) {
-      occlusionMask = maskResult.mask;
-    }
-    if (
-      !subjectOcclusionMaskCache.get(subjectFrame)?.has(maskResult) &&
-      maskResult.referenceWidth > 0 &&
-      maskResult.referenceHeight > 0 &&
-      maskResult.referenceRgba.length ===
-        maskResult.referenceWidth * maskResult.referenceHeight * 4
-    ) {
-      try {
-        const currentReferenceCanvas = new OffscreenCanvas(
-          maskResult.referenceWidth,
-          maskResult.referenceHeight,
-        );
-        const currentReferenceCtx = currentReferenceCanvas.getContext("2d", {
-          willReadFrequently: true,
-        });
-        if (currentReferenceCtx) {
-          currentReferenceCtx.drawImage(
-            subjectFrame,
-            0,
-            0,
-            maskResult.referenceWidth,
-            maskResult.referenceHeight,
-          );
-          const currentRgba = currentReferenceCtx.getImageData(
-            0,
-            0,
-            maskResult.referenceWidth,
-            maskResult.referenceHeight,
-          ).data;
-          const motionAwareMaskRgba = createMotionAwareOcclusionMask(
-            maskResult.mask.data,
-            maskResult.width,
-            maskResult.height,
-            maskResult.referenceRgba,
-            currentRgba,
-            maskResult.referenceWidth,
-            maskResult.referenceHeight,
-          );
-          occlusionMask = new ImageData(maskResult.width, maskResult.height);
-          occlusionMask.data.set(motionAwareMaskRgba);
-        }
-      } catch {
-        // Keep using the exact matte if frame readback or motion estimation
-        // fails. Dropping the whole text layer here creates a visible blink.
-        occlusionMask = maskResult.mask;
-      }
-    }
-
-    let frameMasks = subjectOcclusionMaskCache.get(subjectFrame);
-    if (!frameMasks) {
-      frameMasks = new WeakMap();
-      subjectOcclusionMaskCache.set(subjectFrame, frameMasks);
-    }
-    frameMasks.set(maskResult, occlusionMask);
-
-    maskCtx.putImageData(occlusionMask, 0, 0);
-    textCtx.save();
-    textCtx.globalCompositeOperation = "destination-out";
-    textCtx.imageSmoothingEnabled = true;
-    textCtx.imageSmoothingQuality = "high";
-    textCtx.drawImage(maskCanvas, 0, 0, canvasWidth, canvasHeight);
-    textCtx.restore();
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const renderOverlayLayerWithEffects = async (
-  ctx: CanvasRenderingContext2D,
-  clipId: string,
-  canvasWidth: number,
-  canvasHeight: number,
-  render: (layerCtx: CanvasRenderingContext2D) => void | Promise<void>,
-): Promise<void> => {
-  if (!clipNeedsFrameProcessing(clipId)) {
-    await render(ctx);
-    return;
-  }
-  const layerCanvas = document.createElement("canvas");
-  layerCanvas.width = canvasWidth;
-  layerCanvas.height = canvasHeight;
-  const layerCtx = layerCanvas.getContext("2d");
-  if (!layerCtx) return;
-  await render(layerCtx);
-  const prepared = await preparePreviewFrame(
-    clipId,
-    layerCanvas,
-    false,
-    true,
-  );
-  try {
-    ctx.drawImage(prepared.frame, 0, 0, canvasWidth, canvasHeight);
-  } finally {
-    prepared.cleanup();
-  }
-};
-
-const renderShapeClipWithEffects = async (
-  ctx: CanvasRenderingContext2D,
-  shapeClip: ShapeClip | SVGClip | StickerClip,
-  canvasWidth: number,
-  canvasHeight: number,
-  time: number,
-): Promise<void> => {
-  await renderOverlayLayerWithEffects(
-    ctx,
-    shapeClip.id,
-    canvasWidth,
-    canvasHeight,
-    (layerCtx) =>
-      renderShapeClipToCanvas(
-        layerCtx,
-        shapeClip,
-        canvasWidth,
-        canvasHeight,
-        time,
-      ),
-  );
-};
-
-const renderTextClipWithSubjectMask = async (
-  ctx: CanvasRenderingContext2D,
-  textClip: TextClip,
-  canvasWidth: number,
-  canvasHeight: number,
-  time: number,
-  subjectFrame: ImageBitmap | null,
-  realtime = true,
-  streamId = "editor:text-behind-subject:canvas",
-): Promise<void> => {
-  let subjectMask: SegmentationResult | null = null;
-  if (textClip.behindSubject && subjectFrame) {
-    const segEngine = getPersonSegmentationEngine();
-    if (segEngine.isInitialized()) {
-      subjectMask = await getSubjectMaskForFrame(
-        subjectFrame,
-        time,
-        realtime,
-        streamId,
-      );
-    }
-    // During the worker's first realtime inference, keep the text hidden
-    // instead of flashing it in front of the subject for one or two frames.
-    if (!subjectMask && realtime) return;
-  }
-
-  const renderTextLayer = (targetCtx: CanvasRenderingContext2D) =>
-    renderOverlayLayerWithEffects(
-      targetCtx,
-      textClip.id,
-      canvasWidth,
-      canvasHeight,
-      (layerCtx) =>
-        renderTextClipToCanvas(
-          layerCtx,
-          textClip,
-          canvasWidth,
-          canvasHeight,
-          time,
-        ),
-    );
-
-  if (!textClip.behindSubject || !subjectFrame || !subjectMask) {
-    await renderTextLayer(ctx);
-    return;
-  }
-
-  const textLayerCanvas = document.createElement("canvas");
-  textLayerCanvas.width = canvasWidth;
-  textLayerCanvas.height = canvasHeight;
-  const textLayerCtx = textLayerCanvas.getContext("2d");
-  if (!textLayerCtx) return;
-  await renderTextLayer(textLayerCtx);
-  if (
-    !applySubjectOcclusionMask(
-      textLayerCtx,
-      subjectFrame,
-      canvasWidth,
-      canvasHeight,
-      subjectMask,
-    )
-  ) {
-    return;
-  }
-  ctx.drawImage(textLayerCanvas, 0, 0, canvasWidth, canvasHeight);
-};
-
 interface ClipWithPlaceholder {
   isPlaceholder?: boolean;
 }
 
 export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = false }) => {
+  const [resourceManager] = useState(() => new PreviewResourceManager());
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoAreaRef = useRef<HTMLDivElement>(null);
@@ -871,115 +214,6 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
   >(new Map());
   const nativeImageBitmapCacheRef = useRef<Map<string, ImageBitmap>>(new Map());
 
-  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const gainNodeRef = useRef<GainNode | null>(null);
-  const audioGraphRef = useRef<ReturnType<typeof getRealtimeAudioGraph> | null>(
-    null,
-  );
-  const audioBufferCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
-  const processedAudioBufferCacheRef = useRef<Map<string, AudioBuffer>>(new Map());
-  const noAudioBufferRef = useRef<Set<string>>(new Set());
-
-  const getAudioBufferCacheKey = (mediaId: string, audioTrackIndex?: number): string =>
-    `${mediaId}:${audioTrackIndex ?? 0}`;
-
-  const loadAudioBuffer = async (
-    audioContext: AudioContext | BaseAudioContext,
-    blob: Blob,
-    audioTrackIndex: number = 0,
-  ): Promise<AudioBuffer | null> => {
-    try {
-      const { extractAudioWav } = await import("@openreel/core/media");
-      const wavBlob = await extractAudioWav(blob, audioTrackIndex);
-      const arrayBuffer = await wavBlob.arrayBuffer();
-      return await audioContext.decodeAudioData(arrayBuffer);
-    } catch (error) {
-      if (error instanceof Error && error.name === "NoAudioStreamError") {
-        return null;
-      }
-    }
-
-    if (audioTrackIndex === 0) {
-      try {
-        const arrayBuffer = await blob.arrayBuffer();
-        return await audioContext.decodeAudioData(arrayBuffer);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  };
-
-  const getAudioEffectSignature = useCallback((effects: Effect[]): string =>
-    JSON.stringify(
-      effects.map((effect) => ({
-        id: effect.id,
-        type: effect.type,
-        enabled: effect.enabled,
-        params: effect.params,
-        metadata: effect.metadata,
-      })),
-    ), []);
-
-  const getPreviewAudioBufferForEffects = useCallback(
-    async (
-      audioBuffer: AudioBuffer,
-      baseCacheKey: string,
-      effects: Effect[],
-    ): Promise<{ audioBuffer: AudioBuffer; effects: Effect[] }> => {
-      const previewEffects = getPreviewAudioEffects(
-        effects.filter((effect) => effect.enabled),
-      );
-      const { profileAwareNoiseEffects, realtimeEffects } =
-        splitProfileAwareNoiseReductionEffects(previewEffects);
-
-      if (profileAwareNoiseEffects.length === 0) {
-        return { audioBuffer, effects: realtimeEffects };
-      }
-
-      const processedCacheKey = `${baseCacheKey}:profile-denoise:${getAudioEffectSignature(profileAwareNoiseEffects)}`;
-      const cached = processedAudioBufferCacheRef.current.get(processedCacheKey);
-      if (cached) {
-        return { audioBuffer: cached, effects: realtimeEffects };
-      }
-
-      const effectsEngine = await initializeAudioEffectsEngine();
-      let processedBuffer = audioBuffer;
-
-      for (const effect of profileAwareNoiseEffects) {
-        const params = effect.params as AudioEffectParams["noiseReduction"];
-        if (!params.profile) {
-          continue;
-        }
-
-        processedBuffer = await effectsEngine.applyNoiseReductionWithProfileData(
-          processedBuffer,
-          params.profile,
-          params.reduction ?? 0.5,
-          params.focus ?? "balanced",
-          params.threshold ?? -40,
-        );
-      }
-
-      processedAudioBufferCacheRef.current.set(processedCacheKey, processedBuffer);
-      return { audioBuffer: processedBuffer, effects: realtimeEffects };
-    },
-    [getAudioEffectSignature],
-  );
-
-  const getResolvedClipAudioEffects = useCallback((clip: PreviewClip): Effect[] => {
-    return resolveTimelineClipAudioEffects(clip, {
-      tracks: timelineTracksRef.current,
-    });
-  }, []);
-
-  const getResolvedClipVolumeAutomation = useCallback((clip: PreviewClip) =>
-    resolveClipVolumeAutomation(clip, {
-      tracks: timelineTracksRef.current,
-    }), []);
-
-  const rendererRef = useRef<Renderer | null>(null);
-  const rendererInitializedRef = useRef<boolean>(false);
   const motionRendererRef = useRef<MotionRenderer | null>(null);
   const motionAssetBitmapCacheRef = useRef<Map<string, ImageBitmap>>(new Map());
 
@@ -992,25 +226,12 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
   const [isRenderBridgeReady, setIsRenderBridgeReady] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [videoAreaSize, setVideoAreaSize] = useState({ width: 0, height: 0 });
-  const [, setRendererType] = useState<string>("none");
   const [isMaximized, setIsMaximized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [showZoomMenu, setShowZoomMenu] = useState(false);
-  const [showQualityMenu, setShowQualityMenu] = useState(false);
-  const [showAspectMenu, setShowAspectMenu] = useState(false);
   const [showCompositionGrid, setShowCompositionGrid] = useState(false);
   const [showSafeMargins, setShowSafeMargins] = useState(false);
   const [canvasSnappingEnabled, setCanvasSnappingEnabled] = useState(true);
-
-  const ZOOM_OPTIONS = [
-    { label: "50%", value: 0.5 },
-    { label: "75%", value: 0.75 },
-    { label: "100%", value: 1 },
-    { label: "125%", value: 1.25 },
-    { label: "150%", value: 1.5 },
-    { label: "200%", value: 2 },
-  ];
 
   const isDark = useThemeStore((state) => state.isDark);
 
@@ -1022,49 +243,29 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
   // backdrop of the base clip in both preview and export.)
   const previewBgRef = useRef<string>(isDark ? "#000000" : "#ffffff");
 
-  // Canvas interaction state for resize/move
-  const [interactionMode, setInteractionMode] =
-    useState<InteractionMode>("none");
-  const [activeHandle, setActiveHandle] = useState<HandlePosition | null>(null);
-  const [lockAspectRatio, setLockAspectRatio] = useState(true);
-  const interactionStartRef = useRef<{
-    x: number;
-    y: number;
-    transform: { x: number; y: number; scaleX: number; scaleY: number };
-  } | null>(null);
-  const pendingTransformRef = useRef<{
-    clipId: string;
-    transform: {
-      position?: { x: number; y: number };
-      scale?: { x: number; y: number };
-    };
-  } | null>(null);
-  const rafIdRef = useRef<number | null>(null);
+  const {
+    interactionMode,
+    setInteractionMode,
+    activeHandle,
+    setActiveHandle,
+    lockAspectRatio,
+    setLockAspectRatio,
+    interactionStartRef,
+    pendingTransformRef,
+    rafIdRef,
+    isInteractingRef,
+    lastStoreUpdateRef,
+    liveTransform,
+    setLiveTransform,
+    canvasSnapGuides,
+    setCanvasSnapGuides,
+    interactionTargetType,
+    setInteractionTargetType,
+    interactionTargetIdRef,
+  } = usePreviewInteractions();
 
-  // Track if we're currently interacting to prevent re-renders during resize/move
-  const isInteractingRef = useRef<boolean>(false);
-  // Throttle store updates during interaction (update at most every 32ms ~30fps)
-  const lastStoreUpdateRef = useRef<number>(0);
-  const STORE_UPDATE_THROTTLE_MS = 32;
-  // Throttle playhead updates during playback to reduce React re-renders.
-  // The interval follows the project timebase so 60 fps projects publish a
-  // 60 Hz playhead instead of being capped at 30 Hz.
+  // Publish playhead updates at the project timebase during playback.
   const lastPlayheadUpdateRef = useRef<number>(0);
-  // Live transform state for immediate visual feedback during interaction
-  const [liveTransform, setLiveTransform] = useState<{
-    position: { x: number; y: number };
-    scale: { x: number; y: number };
-  } | null>(null);
-  const [canvasSnapGuides, setCanvasSnapGuides] = useState<{
-    x: number | null;
-    y: number | null;
-  }>({ x: null, y: null });
-
-  // Track interaction target type (video clip or text clip)
-  const [interactionTargetType, setInteractionTargetType] = useState<
-    "clip" | "text-clip" | "shape-clip" | null
-  >(null);
-  const interactionTargetIdRef = useRef<string | null>(null);
 
   // Video element cache for native hardware-accelerated frame decoding (thumbnails/scrubbing)
   // Much more reliable than MediaBunny's CanvasSink for random-access seeking
@@ -1544,20 +745,16 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
   );
 
   const particleEngine = React.useMemo(() => getParticleEngine(), []);
-  const [particleUpdateTrigger, setParticleUpdateTrigger] = React.useState(
-    () => particleEngine.getChangeVersion()
+  const [particleEffects, setParticleEffects] = React.useState(
+    () => particleEngine.getAllEffects(),
   );
 
   React.useEffect(() => {
     const unsubscribe = particleEngine.onEffectsChange(() => {
-      setParticleUpdateTrigger(particleEngine.getChangeVersion());
+      setParticleEffects(particleEngine.getAllEffects());
     });
     return unsubscribe;
   }, [particleEngine]);
-
-  const particleEffects = React.useMemo(() => {
-    return particleEngine.getAllEffects();
-  }, [particleEngine, particleUpdateTrigger]);
 
   // Calculate the actual end time for playback (where clips actually end)
   // This needs to recalculate whenever the timeline changes
@@ -1599,11 +796,15 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
   }, []);
 
   useEffect(() => {
-    return () => {
-      for (const entry of decoderCacheRef.current.values()) {
+    const decoderCache = decoderCacheRef.current;
+    const nativeVideoCache = nativeVideoCacheRef.current;
+    const nativeImageBitmapCache = nativeImageBitmapCacheRef.current;
+    resourceManager.activate();
+    resourceManager.own(() => {
+      for (const entry of decoderCache.values()) {
         entry.input[Symbol.dispose]?.();
       }
-      decoderCacheRef.current.clear();
+      decoderCache.clear();
 
       releaseScrubVideoElements();
 
@@ -1619,35 +820,18 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
       }
       currentVideoMediaIdRef.current = null;
 
-      for (const [, entry] of nativeVideoCacheRef.current) {
+      for (const [, entry] of nativeVideoCache) {
         releaseVideoElement(entry);
       }
-      nativeVideoCacheRef.current.clear();
+      nativeVideoCache.clear();
 
-      for (const [, bitmap] of nativeImageBitmapCacheRef.current) {
+      for (const [, bitmap] of nativeImageBitmapCache) {
         bitmap.close();
       }
-      nativeImageBitmapCacheRef.current.clear();
-    };
-  }, [releaseScrubVideoElements]);
-
-  // Set canvas internal resolution ONLY when project settings change
-  // This follows the WebGPU best practice of keeping internal resolution fixed
-  // and using CSS/transforms for display scaling (prevents flickering during resize)
-  // Using useLayoutEffect to ensure canvas size is set before first paint
-  React.useLayoutEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // Always ensure canvas has correct size
-    if (
-      canvas.width !== previewRes.width ||
-      canvas.height !== previewRes.height
-    ) {
-      canvas.width = previewRes.width;
-      canvas.height = previewRes.height;
-    }
-  }, [previewRes.width, previewRes.height]);
+      nativeImageBitmapCache.clear();
+    });
+    return () => resourceManager.dispose();
+  }, [releaseScrubVideoElements, releaseVideoElement, resourceManager]);
 
   useEffect(() => {
     if (isRenderBridgeReady && canvasRef.current) {
@@ -1656,144 +840,44 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
     }
   }, [isRenderBridgeReady]);
 
-  /**
-   * Initialize WebGPU renderer for GPU-accelerated rendering (once on mount)
-   */
-  useEffect(() => {
-    if (rendererInitializedRef.current || !canvasRef.current) return;
+  const { rendererRef } = usePreviewRenderer({
+    canvasRef,
+    previewRes,
+    resourceManager,
+  });
 
-    const initializeRenderer = async () => {
-      try {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
+  const {
+    rateRef,
+    startPositionRef,
+    playbackResourcesRef,
+    imageBitmapCacheRef,
+    failedImageDecodesRef,
+    cleanupPlaybackResources,
+  } = usePreviewPlayback({
+    playbackRate,
+    isPlaying,
+    playheadPosition,
+    motionAssetBitmapCacheRef,
+  });
 
-        const factory = RendererFactory.getInstance();
-        const renderer = await factory.createRenderer({
-          canvas,
-          width: previewRes.width,
-          height: previewRes.height,
-          preferredRenderer: isWebGPUSupported() ? "webgpu" : "canvas2d",
-        });
-
-        rendererRef.current = renderer;
-        rendererInitializedRef.current = true;
-        setRendererType(renderer.type);
-
-        renderer.onDeviceLost(() => {
-          console.warn("[Preview] GPU device lost, attempting recovery...");
-          renderer.recreateDevice().then((success) => {
-            if (!success) {
-              console.error("[Preview] Failed to recover GPU device");
-              setRendererType("canvas2d");
-            }
-          });
-        });
-      } catch (error) {
-        console.warn("[Preview] Failed to initialize GPU renderer:", error);
-        setRendererType("canvas2d");
-      }
-    };
-
-    initializeRenderer();
-
-    return () => {
-      if (rendererRef.current) {
-        rendererRef.current.destroy();
-        rendererRef.current = null;
-        rendererInitializedRef.current = false;
-      }
-    };
-  }, []);
-
-  /**
-   * Handle canvas resize events
-   *
-   * Update preview at 60fps when dragging to resize
-   */
-  useEffect(() => {
-    if (rendererRef.current && canvasRef.current) {
-      const canvas = canvasRef.current;
-      if (
-        canvas.width !== previewRes.width ||
-        canvas.height !== previewRes.height
-      ) {
-        rendererRef.current.resize(previewRes.width, previewRes.height);
-      }
-    }
-  }, [previewRes.width, previewRes.height]);
-
-  const rateRef = useRef(playbackRate);
-  const startPositionRef = useRef(playheadPosition);
-
-  // MediaBunny playback resources - map of clipId to resources for multi-track playback
-  const playbackResourcesRef = useRef<
-    Map<
-      string,
-      {
-        input: { [Symbol.dispose]?: () => void };
-        sink: unknown;
-        mediaId: string;
-        clipId: string;
-        trackIndex: number;
-      }
-    >
-  >(new Map());
-
-  const imageBitmapCacheRef = useRef<Map<string, ImageBitmap>>(new Map());
-  const failedImageDecodesRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    rateRef.current = playbackRate;
-  }, [playbackRate]);
-
-  useEffect(() => {
-    if (!isPlaying) {
-      startPositionRef.current = playheadPosition;
-    }
-  }, [isPlaying, playheadPosition]);
-
-  const cleanupPlaybackResources = useCallback(() => {
-    const resources = playbackResourcesRef.current;
-    for (const [, resource] of resources) {
-      resource.input[Symbol.dispose]?.();
-    }
-    playbackResourcesRef.current = new Map();
-
-    for (const [, bitmap] of imageBitmapCacheRef.current) {
-      bitmap.close();
-    }
-    imageBitmapCacheRef.current = new Map();
-
-    for (const [, bitmap] of motionAssetBitmapCacheRef.current) {
-      bitmap.close();
-    }
-    motionAssetBitmapCacheRef.current = new Map();
-  }, []);
-
-  const cleanupAudioResources = useCallback(() => {
-    if (audioSourceRef.current) {
-      try {
-        audioSourceRef.current.stop();
-      } catch {
-        // Ignore errors if already stopped
-      }
-      audioSourceRef.current.disconnect();
-      audioSourceRef.current = null;
-    }
-    if (audioGraphRef.current) {
-      audioGraphRef.current.stopScheduler();
-      audioGraphRef.current.stopAllClips();
-    }
-  }, []);
-
-  useEffect(() => {
-    if (gainNodeRef.current) {
-      gainNodeRef.current.gain.value = isMuted ? 0 : 1;
-    }
-    if (audioGraphRef.current) {
-      audioGraphRef.current.setPreviewMuted(isMuted);
-    }
-  }, [isMuted]);
+  const {
+    audioGraphRef,
+    processedAudioBufferCacheRef,
+    cleanupAudioResources,
+    getResolvedClipAudioEffects,
+    setupAudioFromAudioTrack,
+    preDecodeAllAudioBuffers,
+    getAudioClipsForScheduler,
+  } = usePreviewAudio({
+    project,
+    timelineTracks,
+    timelineTracksRef,
+    isPlaying,
+    isMuted,
+    isInteractingRef,
+    getOriginalMediaItem,
+    mediaClipHasAudio,
+  });
 
   const resolveMotionImageAsset = useCallback(
     async (asset: MotionAsset): Promise<ImageBitmap | null> => {
@@ -2015,362 +1099,6 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
       }
     },
     [getMediaItem, isPlaying, mediaClipHasVisual, renderMotionInstancesForTrack],
-  );
-
-  /**
-   * Set up audio playback from the AUDIO TRACK at a given timeline position
-   * Uses RealtimeAudioGraph for real-time audio effects (reverb, delay, EQ, compressor)
-   *
-   * Audio effects can be on either:
-   * 1. The audio clip on the audio track (preferred)
-   * 2. A linked video clip on the video track (same mediaId, same startTime)
-   *
-   * @param timelinePosition - The current position in the timeline
-   */
-  const setupAudioFromAudioTrack = useCallback(
-    async (timelinePosition: number): Promise<void> => {
-      const tracks = timelineTracksRef.current;
-      const audioTracks = tracks.filter(
-        (track) => !track.hidden && trackHasAudioItems(project, track.id),
-      );
-
-      if (!audioGraphRef.current) {
-        audioGraphRef.current = getRealtimeAudioGraph();
-      }
-      const audioGraph = audioGraphRef.current;
-      audioGraph.setPreviewMuted(isMuted);
-
-      const speedEngine = getSpeedEngine();
-      const scheduledClips: AudioClipSchedule[] = [];
-
-      for (const audioTrack of audioTracks) {
-        audioGraph.createTrack({
-          trackId: audioTrack.id,
-          volume: 1,
-          pan: 0,
-          muted: audioTrack.muted || false,
-          solo: audioTrack.solo || false,
-          effects: [],
-        });
-
-        if (audioTrack.muted) {
-          continue;
-        }
-
-        for (const audioClip of audioTrack.clips) {
-          if (!mediaClipHasAudio(audioClip)) {
-            continue;
-          }
-          const clipEnd = audioClip.startTime + audioClip.duration;
-
-          if (
-            timelinePosition >= audioClip.startTime &&
-            timelinePosition < clipEnd
-          ) {
-            const mediaItem = getOriginalMediaItem(audioClip.mediaId);
-            if (!mediaItem?.blob) {
-              continue;
-            }
-
-            const audioCacheKey = getAudioBufferCacheKey(
-              audioClip.mediaId,
-              audioClip.audioTrackIndex,
-            );
-            let audioBuffer = audioBufferCacheRef.current.get(audioCacheKey);
-            if (!audioBuffer) {
-              if (noAudioBufferRef.current.has(audioCacheKey)) {
-                continue;
-              }
-              try {
-                const audioContext = audioGraph.getAudioContext();
-                const loaded = await loadAudioBuffer(
-                  audioContext,
-                  mediaItem.blob,
-                  audioClip.audioTrackIndex ?? 0,
-                );
-                if (!loaded) {
-                  noAudioBufferRef.current.add(audioCacheKey);
-                  continue;
-                }
-                audioBuffer = loaded;
-                audioBufferCacheRef.current.set(audioCacheKey, audioBuffer);
-              } catch (error) {
-                console.warn(
-                  `[Preview] Failed to decode audio for clip ${audioClip.id}:`,
-                  error,
-                );
-                continue;
-              }
-            }
-
-            const audioEffects = getResolvedClipAudioEffects(audioClip);
-
-            const enabledEffects = audioEffects.filter(
-              (e: Effect) => e.enabled,
-            );
-            const previewAudio = await getPreviewAudioBufferForEffects(
-              audioBuffer,
-              audioCacheKey,
-              enabledEffects,
-            );
-
-            audioGraph.updateTrackEffects(audioTrack.id, previewAudio.effects);
-
-            const clipLocalTime = timelinePosition - audioClip.startTime;
-            const isReverse = speedEngine.isReverse(audioClip.id);
-            const transitionFades = getTrackTransitionAudioFades(
-              audioTrack,
-              audioClip.id,
-            );
-
-            let mediaOffset = (audioClip.inPoint || 0) + clipLocalTime;
-            if (isReverse) {
-              mediaOffset = audioBuffer.duration - mediaOffset;
-              mediaOffset = Math.max(0, mediaOffset);
-            }
-
-            scheduledClips.push({
-              clipId: audioClip.id,
-              trackId: audioTrack.id,
-              audioBuffer: previewAudio.audioBuffer,
-              startTime: audioClip.startTime,
-              endTime: clipEnd,
-              mediaOffset,
-              volume: audioClip.volume ?? 1,
-              volumeAutomation: getResolvedClipVolumeAutomation(audioClip),
-              pan: 0,
-              effects: previewAudio.effects,
-              speed: audioClip.speed ?? 1,
-              fadeIn: Math.max(
-                audioClip.fade?.fadeIn ?? 0,
-                transitionFades.fadeIn,
-              ),
-              fadeOut: Math.max(
-                audioClip.fade?.fadeOut ?? 0,
-                transitionFades.fadeOut,
-              ),
-            });
-          }
-        }
-      }
-
-      if (scheduledClips.length > 0) {
-        await audioGraph.resume();
-        audioGraph.scheduleClips(scheduledClips);
-      }
-    },
-    [
-      getOriginalMediaItem,
-      getPreviewAudioBufferForEffects,
-      getResolvedClipAudioEffects,
-      getResolvedClipVolumeAutomation,
-      isMuted,
-      mediaClipHasAudio,
-      project,
-    ],
-  );
-
-  const preDecodeAllAudioBuffers = useCallback(async (): Promise<void> => {
-    const tracks = timelineTracksRef.current;
-    const audioTracks = tracks.filter((track) => !track.hidden);
-
-    if (!audioGraphRef.current) {
-      audioGraphRef.current = getRealtimeAudioGraph();
-    }
-    const audioGraph = audioGraphRef.current;
-    const audioContext = audioGraph.getAudioContext();
-
-    for (const track of audioTracks) {
-      for (const clip of track.clips) {
-        if (!mediaClipHasAudio(clip)) {
-          continue;
-        }
-        const cacheKey = getAudioBufferCacheKey(clip.mediaId, clip.audioTrackIndex);
-        let audioBuffer: AudioBuffer | null | undefined =
-          audioBufferCacheRef.current.get(cacheKey);
-
-        if (!audioBuffer) {
-          if (noAudioBufferRef.current.has(cacheKey)) {
-            continue;
-          }
-          const mediaItem = getOriginalMediaItem(clip.mediaId);
-          if (!mediaItem?.blob) {
-            continue;
-          }
-
-          try {
-            audioBuffer = await loadAudioBuffer(
-              audioContext,
-              mediaItem.blob,
-              clip.audioTrackIndex ?? 0,
-            );
-            if (audioBuffer) {
-              audioBufferCacheRef.current.set(cacheKey, audioBuffer);
-            } else {
-              noAudioBufferRef.current.add(cacheKey);
-            }
-          } catch {
-            audioBuffer = null;
-            noAudioBufferRef.current.add(cacheKey);
-          }
-        }
-
-        if (audioBuffer) {
-          const audioEffects = getResolvedClipAudioEffects(clip).filter(
-            (effect: Effect) => effect.enabled,
-          );
-          if (audioEffects.length > 0) {
-            try {
-              await getPreviewAudioBufferForEffects(audioBuffer, cacheKey, audioEffects);
-            } catch (error) {
-              console.warn(
-                `[Preview] Failed to pre-process audio effects for clip ${clip.id}:`,
-                error,
-              );
-            }
-          }
-        }
-      }
-    }
-  }, [
-    getOriginalMediaItem,
-    getPreviewAudioBufferForEffects,
-    getResolvedClipAudioEffects,
-    mediaClipHasAudio,
-  ]);
-
-  // Pre-warm audio decode caches when the timeline settles after an edit (e.g.
-  // moving/adding a clip), so the realtime scheduler finds decoded buffers ready
-  // on the first play tick instead of silently dropping clips until a lazy decode
-  // lands (~0.5-1s "lag then smooth"). Debounced so it never runs mid-drag, and
-  // skipped during playback. preDecodeAllAudioBuffers is idempotent (cached and
-  // negatively-cached buffers are no-ops), so re-warming after each edit is cheap.
-  const audioWarmupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const audioWarmupIdleRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (isPlaying) {
-      return;
-    }
-
-    if (audioWarmupTimerRef.current) {
-      clearTimeout(audioWarmupTimerRef.current);
-    }
-
-    audioWarmupTimerRef.current = setTimeout(() => {
-      audioWarmupTimerRef.current = null;
-      if (isInteractingRef.current) {
-        return;
-      }
-
-      const warm = () => {
-        void preDecodeAllAudioBuffers().catch(() => {});
-      };
-
-      const idle = (
-        window as Window & {
-          requestIdleCallback?: (
-            cb: () => void,
-            opts?: { timeout: number },
-          ) => number;
-        }
-      ).requestIdleCallback;
-
-      if (typeof idle === "function") {
-        audioWarmupIdleRef.current = idle(warm, { timeout: 1000 });
-      } else {
-        warm();
-      }
-    }, 250);
-
-    return () => {
-      if (audioWarmupTimerRef.current) {
-        clearTimeout(audioWarmupTimerRef.current);
-        audioWarmupTimerRef.current = null;
-      }
-    };
-  }, [timelineTracks, isPlaying, preDecodeAllAudioBuffers]);
-
-  const getAudioClipsForScheduler = useCallback(
-    (time: number): AudioClipSchedule[] => {
-      const tracks = timelineTracksRef.current;
-      const tracksWithAudio = tracks.filter(
-        (track) => !track.hidden && !track.muted,
-      );
-      const schedules: AudioClipSchedule[] = [];
-
-      for (const track of tracksWithAudio) {
-        for (const clip of track.clips) {
-          if (!mediaClipHasAudio(clip)) {
-            continue;
-          }
-          const clipEnd = clip.startTime + clip.duration;
-          if (clipEnd <= time || clip.startTime > time + 1) {
-            continue;
-          }
-
-          const audioBuffer = audioBufferCacheRef.current.get(
-            getAudioBufferCacheKey(clip.mediaId, clip.audioTrackIndex),
-          );
-          if (!audioBuffer) {
-            continue;
-          }
-
-          const audioEffects = getResolvedClipAudioEffects(clip).filter(
-            (e: Effect) => e.enabled,
-          );
-          const previewEffects = getPreviewAudioEffects(audioEffects);
-          const { profileAwareNoiseEffects, realtimeEffects } =
-            splitProfileAwareNoiseReductionEffects(previewEffects);
-          let scheduleAudioBuffer = audioBuffer;
-          let scheduleEffects = previewEffects;
-
-          if (profileAwareNoiseEffects.length > 0) {
-            const processedCacheKey = `${getAudioBufferCacheKey(
-              clip.mediaId,
-              clip.audioTrackIndex,
-            )}:profile-denoise:${getAudioEffectSignature(profileAwareNoiseEffects)}`;
-            const processedAudioBuffer =
-              processedAudioBufferCacheRef.current.get(processedCacheKey);
-
-            if (processedAudioBuffer) {
-              scheduleAudioBuffer = processedAudioBuffer;
-              scheduleEffects = realtimeEffects;
-            }
-          }
-          const transitionFades = getTrackTransitionAudioFades(track, clip.id);
-
-          schedules.push({
-            clipId: clip.id,
-            trackId: track.id,
-            audioBuffer: scheduleAudioBuffer,
-            startTime: clip.startTime,
-            endTime: clipEnd,
-            mediaOffset: clip.inPoint || 0,
-            volume: clip.volume ?? 1,
-            volumeAutomation: getResolvedClipVolumeAutomation(clip),
-            pan: 0,
-            effects: scheduleEffects,
-            speed: clip.speed ?? 1,
-            fadeIn: Math.max(
-              clip.fade?.fadeIn ?? 0,
-              transitionFades.fadeIn,
-            ),
-            fadeOut: Math.max(
-              clip.fade?.fadeOut ?? 0,
-              transitionFades.fadeOut,
-            ),
-          });
-        }
-      }
-
-      return schedules;
-    },
-    [
-      getAudioEffectSignature,
-      getResolvedClipAudioEffects,
-      getResolvedClipVolumeAutomation,
-      mediaClipHasAudio,
-    ],
   );
 
   /**
@@ -3198,7 +1926,9 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
           lastGoodFrameRef.current = await createImageBitmap(
             offscreenCanvasRef.current,
           );
-        } catch {}
+        } catch {
+          // Keep the previous good frame when bitmap capture is unavailable.
+        }
         return true;
       }
 
@@ -3554,8 +2284,6 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
     [
       timelineTracks,
       getMediaItem,
-      allTextClips,
-      allShapeClips,
       getResolvedClipAudioEffects,
       clipMasksById,
       mediaClipHasAudio,
@@ -4384,7 +3112,9 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         try {
           lastGoodFrameRef.current?.close();
           lastGoodFrameRef.current = await createImageBitmap(canvas);
-        } catch {}
+        } catch {
+          // Keep the previous good frame when bitmap capture is unavailable.
+        }
 
         rafId = requestAnimationFrame(() => {
           drawFrame();
@@ -4451,6 +3181,9 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
     },
     [
       actualEndTime,
+      audioGraphRef,
+      rateRef,
+      startPositionRef,
       editingFrameDuration,
       allSubtitles,
       getMediaItem,
@@ -4532,388 +3265,6 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
       });
 
       return results.sort((a, b) => a.trackIndex - b.trackIndex);
-    };
-
-    const findClipAtTime = (time: number) => {
-      const results = findAllClipsAtTime(time);
-      return results.length > 0 ? results[0] : null;
-    };
-
-    const startPlaybackForClip = async (
-      clip: (typeof timelineTracksRef.current)[0]["clips"][0],
-      _track: (typeof timelineTracksRef.current)[0],
-      timelinePosition: number,
-    ) => {
-      try {
-        const mediaItem = getMediaItem(clip.mediaId);
-        if (!mediaItem?.blob) {
-          const clipEndTime = clip.startTime + clip.duration;
-          const nextResult = findClipAtTime(clipEndTime);
-          if (nextResult && clipEndTime < actualEndTime && isActive) {
-            startPlaybackForClip(
-              nextResult.clip,
-              nextResult.track,
-              clipEndTime,
-            );
-          } else {
-            pause();
-          }
-          return;
-        }
-
-        try {
-          const mediabunny = await import("mediabunny");
-          const { Input, ALL_FORMATS, BlobSource, CanvasSink } = mediabunny;
-
-          const input = new Input({
-            source: new BlobSource(mediaItem.blob),
-            formats: ALL_FORMATS,
-          });
-
-          const videoTrack = await input.getPrimaryVideoTrack();
-          if (!videoTrack || !isActive) {
-            input[Symbol.dispose]?.();
-            return;
-          }
-
-          const canDecode = await videoTrack.canDecode();
-          if (!canDecode || !isActive) {
-            input[Symbol.dispose]?.();
-            if (isActive && !canDecode) failProxyPlayback(clip.mediaId, mediaItem.blob);
-            return;
-          }
-
-          // Ensure canvas has valid dimensions BEFORE creating CanvasSink
-          if (canvas.width === 0 || canvas.height === 0) {
-            console.warn(
-              "[Preview] Canvas has zero dimensions, setting from project settings",
-            );
-            canvas.width = previewRes.width;
-            canvas.height = previewRes.height;
-          }
-
-          const sink = new CanvasSink(videoTrack, {
-            poolSize: 3,
-          });
-
-          const speedEngine = getSpeedEngine();
-          const clipLocalTime = Math.max(0, timelinePosition - clip.startTime);
-
-          let currentSpeed = speedEngine.getClipSpeed(clip.id);
-          let isReverse = speedEngine.isReverse(clip.id);
-          let speedSourceClip = clip.id;
-
-          // If video clip has default speed, check for linked audio clip's speed
-          if (currentSpeed === 1 && !isReverse) {
-            const tracks = timelineTracksRef.current;
-            const audioTracks = tracks;
-
-            for (const audioTrack of audioTracks) {
-              for (const audioClip of audioTrack.clips) {
-                if (
-                  mediaClipHasAudio(audioClip) &&
-                  audioClip.mediaId === clip.mediaId &&
-                  Math.abs(audioClip.startTime - clip.startTime) < 0.01
-                ) {
-                  const linkedSpeed = speedEngine.getClipSpeed(audioClip.id);
-                  const linkedReverse = speedEngine.isReverse(audioClip.id);
-
-                  if (linkedSpeed !== 1 || linkedReverse) {
-                    currentSpeed = linkedSpeed;
-                    isReverse = linkedReverse;
-                    speedSourceClip = audioClip.id;
-                    break;
-                  }
-                }
-              }
-              if (currentSpeed !== 1 || isReverse) break;
-            }
-          }
-
-          const adjustedLocalTime = speedEngine.getSourceTimeAtPlaybackTime(
-            speedSourceClip,
-            clipLocalTime,
-          );
-          const mediaStartTime = (clip.inPoint || 0) + adjustedLocalTime;
-
-          const mediaEndTime = Math.min(
-            clip.outPoint || (clip.inPoint || 0) + clip.duration,
-            (await videoTrack.computeDuration()) || Infinity,
-          );
-
-          await setupAudioFromAudioTrack(timelinePosition);
-
-          const ctx = canvas.getContext("2d");
-          if (!ctx) {
-            console.error("[Preview] Failed to get 2D context from canvas");
-            input[Symbol.dispose]?.();
-            return;
-          }
-
-          const frameDuration = editingFrameDuration;
-
-          let currentMediaTime = mediaStartTime;
-          let currentPlayheadTime = timelinePosition;
-          let lastFrameTimestamp = performance.now();
-          let frameCount = 0;
-
-          const processNextFrame = async () => {
-            if (!isActive) {
-              input[Symbol.dispose]?.();
-              return;
-            }
-
-            try {
-              if (currentMediaTime >= mediaEndTime) {
-                input[Symbol.dispose]?.();
-                cleanupAudioResources();
-
-                const clipEndTime = clip.startTime + clip.duration;
-                const nextResult = findClipAtTime(clipEndTime);
-
-                if (nextResult && clipEndTime < actualEndTime && isActive) {
-                  setPlayheadPosition(clipEndTime);
-                  startPlaybackForClip(
-                    nextResult.clip,
-                    nextResult.track,
-                    clipEndTime,
-                  );
-                } else if (!isScrubbingRef.current) {
-                  setPlayheadPosition(0);
-                  startPositionRef.current = 0;
-                  pause();
-                }
-                return;
-              }
-
-              const frameResult = await (
-                sink as {
-                  getCanvas: (time: number) => Promise<{
-                    canvas: HTMLCanvasElement | OffscreenCanvas;
-                    timestamp: number;
-                    duration: number;
-                  } | null>;
-                }
-              ).getCanvas(currentMediaTime);
-
-              frameCount++;
-
-              if (!frameResult || !frameResult.canvas) {
-                console.warn("[Preview] No frame at time", currentMediaTime);
-                const skipTime = frameDuration / 1000;
-                currentPlayheadTime += skipTime;
-                currentMediaTime += skipTime * currentSpeed;
-                if (isActive) {
-                  animationRef.current =
-                    requestAnimationFrame(processNextFrame);
-                }
-                return;
-              }
-
-              const { canvas: frameCanvas, duration } = frameResult;
-
-              const frameWidth = "width" in frameCanvas ? frameCanvas.width : 0;
-              const frameHeight =
-                "height" in frameCanvas ? frameCanvas.height : 0;
-              if (frameWidth === 0 || frameHeight === 0) {
-                console.warn("[Preview] Frame has zero dimensions, skipping");
-                const skipTime = frameDuration / 1000;
-                currentPlayheadTime += skipTime;
-                currentMediaTime += skipTime * currentSpeed;
-                if (isActive) {
-                  animationRef.current =
-                    requestAnimationFrame(processNextFrame);
-                }
-                return;
-              }
-
-              const currentPlayhead = currentPlayheadTime;
-
-              if (currentPlayhead >= actualEndTime) {
-                if (!isScrubbingRef.current) {
-                  setPlayheadPosition(0);
-                  startPositionRef.current = 0;
-                  pause();
-                }
-                input[Symbol.dispose]?.();
-                return;
-              }
-
-              const clipLocalTime = currentPlayhead - clip.startTime;
-              let transform = scaleTransformPositionForPreview(
-                getAnimatedTransform(
-                  (clip.transform as ClipTransform) || DEFAULT_TRANSFORM,
-                  clip.keyframes,
-                  clipLocalTime,
-                ),
-                previewRes.scale,
-              );
-
-              if (
-                clip.emphasisAnimation &&
-                clip.emphasisAnimation.type !== "none"
-              ) {
-                const emphasisState = applyEmphasisAnimation(
-                  clip.emphasisAnimation,
-                  clipLocalTime,
-                );
-                transform = {
-                  ...transform,
-                  opacity: transform.opacity * emphasisState.opacity,
-                  scale: {
-                    x:
-                      transform.scale.x *
-                      emphasisState.scale *
-                      emphasisState.scaleX,
-                    y:
-                      transform.scale.y *
-                      emphasisState.scale *
-                      emphasisState.scaleY,
-                  },
-                  position: {
-                    x:
-                      transform.position.x +
-                      emphasisState.offsetX * canvas.width,
-                    y:
-                      transform.position.y +
-                      emphasisState.offsetY * canvas.height,
-                  },
-                  rotation: transform.rotation + emphasisState.rotation,
-                };
-              }
-
-              const useGPU =
-                rendererRef.current &&
-                rendererRef.current.type === "webgpu" &&
-                !clipMasksById.has(clip.id);
-              const preparedFrame = await preparePreviewFrame(
-                clip.id,
-                frameCanvas,
-                Boolean(useGPU),
-                true,
-              );
-              const stabilizedTransform = applyStabilizationTransform(
-                clip,
-                transform,
-                currentMediaTime,
-                canvas.width,
-                canvas.height,
-                preparedFrame.frame.width,
-                preparedFrame.frame.height,
-              );
-
-              fillPreviewBackground(
-                ctx,
-                playheadPositionRef.current,
-                canvas.width,
-                canvas.height,
-              );
-              if (
-                canvasFillModeRef.current === "blur" &&
-                frameWidth > 0 &&
-                frameHeight > 0
-              ) {
-                drawBlurredBackdrop(
-                  ctx,
-                  frameCanvas,
-                  frameWidth,
-                  frameHeight,
-                  canvas.width,
-                  canvas.height,
-                );
-              }
-              if (useGPU && preparedFrame.frame instanceof ImageBitmap) {
-                const gpuResult = await renderFrameWithGPU(
-                  rendererRef.current!,
-                  preparedFrame.frame,
-                  stabilizedTransform,
-                  canvas.width,
-                  canvas.height,
-                );
-                if (gpuResult) {
-                  ctx.drawImage(gpuResult, 0, 0, canvas.width, canvas.height);
-                  gpuResult.close();
-                } else {
-                  await drawClipFrame(
-                    ctx,
-                    clip.id,
-                    preparedFrame.frame,
-                    stabilizedTransform,
-                    canvas.width,
-                    canvas.height,
-                    currentPlayhead,
-                  );
-                }
-              } else {
-                await drawClipFrame(
-                  ctx,
-                  clip.id,
-                  preparedFrame.frame,
-                  stabilizedTransform,
-                  canvas.width,
-                  canvas.height,
-                  currentPlayhead,
-                );
-              }
-              preparedFrame.cleanup();
-
-              const nowPh = performance.now();
-              if (nowPh - lastPlayheadUpdateRef.current >= editingFrameDuration) {
-                lastPlayheadUpdateRef.current = nowPh;
-                setPlayheadPosition(currentPlayhead);
-              }
-
-              const now = performance.now();
-              const elapsed = now - lastFrameTimestamp;
-              const actualFrameDuration =
-                duration > 0 ? duration * 1000 : frameDuration;
-              const targetTime = actualFrameDuration / rateRef.current;
-
-              const normalTimeAdvance = actualFrameDuration / 1000;
-              const mediaTimeAdvance = normalTimeAdvance * currentSpeed;
-              currentPlayheadTime += normalTimeAdvance;
-              currentMediaTime += mediaTimeAdvance;
-
-              const delay = Math.max(0, targetTime - elapsed);
-              lastFrameTimestamp = now;
-
-              if (isActive) {
-                if (delay > 0) {
-                  setTimeout(() => {
-                    if (isActive) {
-                      animationRef.current =
-                        requestAnimationFrame(processNextFrame);
-                    }
-                  }, delay);
-                } else {
-                  animationRef.current =
-                    requestAnimationFrame(processNextFrame);
-                }
-              }
-            } catch (error) {
-              console.error("[Preview] Frame error:", error);
-              input[Symbol.dispose]?.();
-              pause();
-            }
-          };
-
-          animationRef.current = requestAnimationFrame(processNextFrame);
-        } catch (error) {
-          console.error("[Preview] MediaBunny setup error:", error);
-          if (!isActive) return;
-          if (mediaItem.blob !== getOriginalMediaItem(clip.mediaId)?.blob) {
-            failProxyPlayback(clip.mediaId, mediaItem.blob);
-          } else {
-            pause();
-          }
-        }
-      } catch (outerError) {
-        console.error(
-          "[Preview] startPlaybackForClip outer error:",
-          outerError,
-        );
-        pause();
-      }
     };
 
     const initClipResources = async (
@@ -5123,7 +3474,6 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
 
       const frameDuration = editingFrameDuration;
       let lastFrameTimestamp = performance.now();
-      let frameCount = 0;
       let isProcessingFrame = false;
 
       const processMultiTrackFrame = async () => {
@@ -5253,7 +3603,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
           );
           if (hasActiveCompound) {
             await renderFrameDirectlyRef.current(currentPlayhead);
-            frameCount++;
+            // Keep the master clock synchronized with the rendered frame.
             masterClock.reportVideoTime(currentPlayhead);
             const now = performance.now();
             const elapsed = now - lastFrameTimestamp;
@@ -5459,7 +3809,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
 
                   mainCtx.drawImage(offscreenCanvasRef.current!, 0, 0);
 
-                  frameCount++;
+                  // Keep the master clock synchronized with the rendered frame.
                   masterClock.reportVideoTime(currentPlayhead);
                   const nowTr = performance.now();
                   if (
@@ -5878,7 +4228,9 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
             try {
               lastGoodFrameRef.current?.close();
               lastGoodFrameRef.current = await createImageBitmap(offscreenCanvasRef.current!);
-            } catch {}
+            } catch {
+          // Keep the previous good frame when bitmap capture is unavailable.
+        }
           } else if (lastGoodFrameRef.current) {
             ctx.drawImage(
               lastGoodFrameRef.current,
@@ -5905,7 +4257,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
             mainCtx.drawImage(offscreenCanvasRef.current!, 0, 0);
           }
 
-          frameCount++;
+          // Keep the master clock synchronized with the rendered frame.
           masterClock.reportVideoTime(currentPlayhead);
           const now = performance.now();
           const elapsed = now - lastFrameTimestamp;
@@ -6093,6 +4445,13 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
     setupAudioFromAudioTrack,
     preDecodeAllAudioBuffers,
     getAudioClipsForScheduler,
+    audioGraphRef,
+    failedImageDecodesRef,
+    imageBitmapCacheRef,
+    playbackResourcesRef,
+    rateRef,
+    rendererRef,
+    startPositionRef,
     isMuted,
     previewRes.width,
     previewRes.height,
@@ -6197,6 +4556,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
     project,
     proxySourceRevision,
     isDark,
+    isInteractingRef,
   ]);
 
   const [previewInvalidateCounter, setPreviewInvalidateCounter] = useState(0);
@@ -6210,7 +4570,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
     };
     window.addEventListener("openreel:preview-invalidate", handler);
     return () => window.removeEventListener("openreel:preview-invalidate", handler);
-  }, []);
+  }, [audioGraphRef, processedAudioBufferCacheRef]);
 
   useEffect(() => {
     if (isPlaying || previewInvalidateCounter === 0) return;
@@ -6265,6 +4625,8 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
   const activeTextClip = selectedTextClip;
 
   const clipBounds = useMemo(() => {
+    // CSS resize changes DOMRect measurements without changing project settings.
+    void canvasSize;
     const clip = selectedClip || clipAtPlayhead;
     if (!clip || !canvasRef.current || !overlayRef.current) return null;
 
@@ -6378,6 +4740,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
   ]);
 
   const textClipBounds = useMemo(() => {
+    void canvasSize;
     if (!selectedTextClip || !canvasRef.current || !overlayRef.current)
       return null;
 
@@ -6567,6 +4930,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
   }, [allShapeClips, playheadPosition]);
 
   const shapeClipBounds = useMemo(() => {
+    void canvasSize;
     if (!selectedShapeClip || !canvasRef.current || !overlayRef.current)
       return null;
 
@@ -6761,6 +5125,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
   }, [selectedSubtitleId, allSubtitles]);
 
   const subtitleBounds = useMemo(() => {
+    void canvasSize;
     if (!selectedSubtitleObj || !canvasRef.current || !overlayRef.current)
       return null;
     if (
@@ -6868,7 +5233,14 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         },
       };
     },
-    [selectedClip, clipAtPlayhead],
+    [
+      selectedClip,
+      clipAtPlayhead,
+      interactionStartRef,
+      isInteractingRef,
+      setActiveHandle,
+      setInteractionMode,
+    ],
   );
 
   const handleClipMouseDown = useCallback(
@@ -6900,7 +5272,13 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         },
       };
     },
-    [selectedClip, clipAtPlayhead],
+    [
+      selectedClip,
+      clipAtPlayhead,
+      interactionStartRef,
+      isInteractingRef,
+      setInteractionMode,
+    ],
   );
 
   const handleTextClipMouseDown = useCallback(
@@ -6927,7 +5305,14 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         },
       };
     },
-    [activeTextClip],
+    [
+      activeTextClip,
+      interactionStartRef,
+      interactionTargetIdRef,
+      isInteractingRef,
+      setInteractionMode,
+      setInteractionTargetType,
+    ],
   );
 
   const handleTextHandleMouseDown = useCallback(
@@ -6955,7 +5340,15 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         },
       };
     },
-    [activeTextClip],
+    [
+      activeTextClip,
+      interactionStartRef,
+      interactionTargetIdRef,
+      isInteractingRef,
+      setActiveHandle,
+      setInteractionMode,
+      setInteractionTargetType,
+    ],
   );
 
   const handleShapeClipMouseDown = useCallback(
@@ -6982,7 +5375,14 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         },
       };
     },
-    [activeShapeClip],
+    [
+      activeShapeClip,
+      interactionStartRef,
+      interactionTargetIdRef,
+      isInteractingRef,
+      setInteractionMode,
+      setInteractionTargetType,
+    ],
   );
 
   const handleShapeHandleMouseDown = useCallback(
@@ -7010,7 +5410,15 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         },
       };
     },
-    [activeShapeClip],
+    [
+      activeShapeClip,
+      interactionStartRef,
+      interactionTargetIdRef,
+      isInteractingRef,
+      setActiveHandle,
+      setInteractionMode,
+      setInteractionTargetType,
+    ],
   );
 
   const handleGraphicsMouseMove = useCallback(
@@ -7418,6 +5826,16 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
       textClipBounds,
       activeTextClip,
       updateTextTransform,
+      activeShapeClip,
+      shapeClipBounds,
+      updateShapeTransform,
+      interactionStartRef,
+      interactionTargetIdRef,
+      lastStoreUpdateRef,
+      pendingTransformRef,
+      rafIdRef,
+      setCanvasSnapGuides,
+      setLiveTransform,
     ],
   );
 
@@ -7452,7 +5870,21 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         void renderFrameDirectly(playheadPosition);
       }
     }
-  }, [updateClipTransform, renderFrameDirectly, playheadPosition]);
+  }, [
+    updateClipTransform,
+    renderFrameDirectly,
+    playheadPosition,
+    interactionStartRef,
+    interactionTargetIdRef,
+    isInteractingRef,
+    pendingTransformRef,
+    rafIdRef,
+    setActiveHandle,
+    setCanvasSnapGuides,
+    setInteractionMode,
+    setInteractionTargetType,
+    setLiveTransform,
+  ]);
 
   const handleCropChange = useCallback(
     (crop: { x: number; y: number; width: number; height: number }) => {
@@ -7472,50 +5904,10 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
   }, [setCropMode]);
 
   useEffect(() => {
-    if (interactionMode !== "none") {
-      const handleGlobalMouseUp = () => {
-        let transformCommit: ReturnType<
-          typeof updateClipTransform
-        > | null = null;
-        if (pendingTransformRef.current) {
-          transformCommit = updateClipTransform(
-            pendingTransformRef.current.clipId,
-            pendingTransformRef.current.transform,
-          );
-          pendingTransformRef.current = null;
-        }
-        if (rafIdRef.current) {
-          cancelAnimationFrame(rafIdRef.current);
-          rafIdRef.current = null;
-        }
-
-        const wasInteracting = isInteractingRef.current;
-        isInteractingRef.current = false;
-        setInteractionMode("none");
-        setActiveHandle(null);
-        interactionStartRef.current = null;
-        setLiveTransform(null);
-
-        if (wasInteracting) {
-          if (transformCommit) {
-            void transformCommit.then(() =>
-              renderFrameDirectly(playheadPosition),
-            );
-          } else {
-            void renderFrameDirectly(playheadPosition);
-          }
-        }
-      };
-
-      window.addEventListener("mouseup", handleGlobalMouseUp);
-      return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
-    }
-  }, [
-    interactionMode,
-    renderFrameDirectly,
-    playheadPosition,
-    updateClipTransform,
-  ]);
+    if (interactionMode === "none") return;
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => window.removeEventListener("mouseup", handleMouseUp);
+  }, [interactionMode, handleMouseUp]);
 
   const handleScrubClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -7579,8 +5971,6 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  const progressPercentage =
-    actualEndTime > 0 ? (playheadPosition / actualEndTime) * 100 : 0;
   const previewLoopRange = resolvePlaybackLoop(
     { loopEnabled: true, loopStart, loopEnd },
     actualEndTime,
@@ -7720,53 +6110,12 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
             }}
           />
 
-          {showCompositionGrid && !cropMode ? (
-            <div
-              aria-label="Composition grid"
-              className="pointer-events-none absolute inset-0 z-20"
-            >
-              {[1, 2].map((line) => (
-                <React.Fragment key={line}>
-                  <span
-                    className="absolute inset-y-0 w-px bg-white/45 shadow-[0_0_1px_rgba(0,0,0,0.9)]"
-                    style={{ left: `${(line / 3) * 100}%` }}
-                  />
-                  <span
-                    className="absolute inset-x-0 h-px bg-white/45 shadow-[0_0_1px_rgba(0,0,0,0.9)]"
-                    style={{ top: `${(line / 3) * 100}%` }}
-                  />
-                </React.Fragment>
-              ))}
-            </div>
-          ) : null}
-
-          {showSafeMargins && !cropMode ? (
-            <div
-              aria-label="Title and action safe margins"
-              className="pointer-events-none absolute inset-0 z-20"
-            >
-              <span className="absolute inset-[5%] border border-dashed border-white/60 shadow-[0_0_1px_rgba(0,0,0,0.9)]" />
-              <span className="absolute inset-[10%] border border-white/75 shadow-[0_0_1px_rgba(0,0,0,0.9)]" />
-              <span className="absolute left-[10%] top-[10%] rounded-br bg-black/55 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white/80">
-                Title safe
-              </span>
-            </div>
-          ) : null}
-
-          {canvasSnapGuides.x !== null && !cropMode ? (
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 z-30 w-px bg-accent shadow-[0_0_3px_var(--accent)]"
-              style={{ left: `${canvasSnapGuides.x * 100}%` }}
-            />
-          ) : null}
-          {canvasSnapGuides.y !== null && !cropMode ? (
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 z-30 h-px bg-accent shadow-[0_0_3px_var(--accent)]"
-              style={{ top: `${canvasSnapGuides.y * 100}%` }}
-            />
-          ) : null}
+          <PreviewGuides
+            showCompositionGrid={showCompositionGrid}
+            showSafeMargins={showSafeMargins}
+            cropMode={cropMode}
+            snapGuides={canvasSnapGuides}
+          />
 
           {/* Processing Overlay */}
           <ProcessingOverlay />
@@ -7804,254 +6153,51 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
 
           {/* Resize/Transform Overlay */}
           {!cropMode && showResizeHandles && clipBounds && (
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                left: clipBounds.x,
-                top: clipBounds.y,
-                width: clipBounds.width,
-                height: clipBounds.height,
-              }}
-            >
-              {/* Selection border */}
-              <div className={`absolute inset-0 border-primary pointer-events-none ${hideControls ? "border" : "border-2"}`} />
-
-              {/* Hawsh phone editor (hideControls): border only, the mouse handles don't work by touch. */}
-              {!hideControls && (<>
-              {/* Move handle (center) */}
-              <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-primary/80 rounded-full flex items-center justify-center cursor-move pointer-events-auto hover:bg-primary transition-colors"
-                onMouseDown={handleClipMouseDown}
-                title="Drag to move"
-              >
-                <Move size={14} className="text-white" />
-              </div>
-
-              {/* Aspect ratio lock toggle */}
-              <Button
-                label={lockAspectRatio ? "Unlock aspect ratio" : "Lock aspect ratio"}
-                variant="ghost"
-                className={`absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 text-[10px] rounded pointer-events-auto transition-colors ${
-                  lockAspectRatio
-                    ? "bg-primary text-white"
-                    : "bg-background-tertiary text-text-secondary border border-border hover:bg-background-elevated"
-                }`}
-                onClick={() => setLockAspectRatio(!lockAspectRatio)}
-              >
-                {lockAspectRatio ? "🔒 Locked" : "🔓 Free"}
-              </Button>
-
-              {/* Corner resize handles */}
-              <div
-                className="absolute -left-2 -top-2 w-4 h-4 bg-white border-2 border-primary rounded-sm cursor-nw-resize pointer-events-auto hover:bg-primary hover:border-white transition-colors"
-                onMouseDown={(e) => handleHandleMouseDown(e, "nw")}
-              />
-              <div
-                className="absolute -right-2 -top-2 w-4 h-4 bg-white border-2 border-primary rounded-sm cursor-ne-resize pointer-events-auto hover:bg-primary hover:border-white transition-colors"
-                onMouseDown={(e) => handleHandleMouseDown(e, "ne")}
-              />
-              <div
-                className="absolute -left-2 -bottom-2 w-4 h-4 bg-white border-2 border-primary rounded-sm cursor-sw-resize pointer-events-auto hover:bg-primary hover:border-white transition-colors"
-                onMouseDown={(e) => handleHandleMouseDown(e, "sw")}
-              />
-              <div
-                className="absolute -right-2 -bottom-2 w-4 h-4 bg-white border-2 border-primary rounded-sm cursor-se-resize pointer-events-auto hover:bg-primary hover:border-white transition-colors"
-                onMouseDown={(e) => handleHandleMouseDown(e, "se")}
-              />
-
-              {/* Edge resize handles */}
-              <div
-                className="absolute left-1/2 -translate-x-1/2 -top-2 w-6 h-4 bg-white border-2 border-primary rounded-sm cursor-n-resize pointer-events-auto hover:bg-primary hover:border-white transition-colors"
-                onMouseDown={(e) => handleHandleMouseDown(e, "n")}
-              />
-              <div
-                className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-6 h-4 bg-white border-2 border-primary rounded-sm cursor-s-resize pointer-events-auto hover:bg-primary hover:border-white transition-colors"
-                onMouseDown={(e) => handleHandleMouseDown(e, "s")}
-              />
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -left-2 w-4 h-6 bg-white border-2 border-primary rounded-sm cursor-w-resize pointer-events-auto hover:bg-primary hover:border-white transition-colors"
-                onMouseDown={(e) => handleHandleMouseDown(e, "w")}
-              />
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -right-2 w-4 h-6 bg-white border-2 border-primary rounded-sm cursor-e-resize pointer-events-auto hover:bg-primary hover:border-white transition-colors"
-                onMouseDown={(e) => handleHandleMouseDown(e, "e")}
-              />
-              </>)}
-            </div>
+            <TransformOverlay
+              bounds={clipBounds}
+              tone="primary"
+              moveTitle="Drag to move"
+              hideControls={hideControls}
+              lockAspectRatio={lockAspectRatio}
+              onMoveMouseDown={handleClipMouseDown}
+              onHandleMouseDown={handleHandleMouseDown}
+              onLockAspectRatioChange={setLockAspectRatio}
+            />
           )}
 
           {/* Text Clip Resize/Transform Overlay */}
           {showTextClipHandles && textClipBounds && (
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                left: textClipBounds.x,
-                top: textClipBounds.y,
-                width: textClipBounds.width,
-                height: textClipBounds.height,
-              }}
-            >
-              {/* Selection border - cyan for text clips */}
-              <div className={`absolute inset-0 border-cyan-500 pointer-events-none ${hideControls ? "border" : "border-2"}`} />
-
-              {!hideControls && (<>
-              {/* Move handle (center) */}
-              <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-cyan-500/80 rounded-full flex items-center justify-center cursor-move pointer-events-auto hover:bg-cyan-500 transition-colors"
-                onMouseDown={handleTextClipMouseDown}
-                title="Drag to move text"
-              >
-                <Move size={14} className="text-white" />
-              </div>
-
-              {/* Aspect ratio lock toggle */}
-              <Button
-                label={lockAspectRatio ? "Unlock aspect ratio" : "Lock aspect ratio"}
-                variant="ghost"
-                className={`absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 text-[10px] rounded pointer-events-auto transition-colors ${
-                  lockAspectRatio
-                    ? "bg-cyan-500 text-white"
-                    : "bg-background-tertiary text-text-secondary border border-border hover:bg-background-elevated"
-                }`}
-                onClick={() => setLockAspectRatio(!lockAspectRatio)}
-              >
-                {lockAspectRatio ? "🔒 Locked" : "🔓 Free"}
-              </Button>
-
-              {/* Corner resize handles */}
-              <div
-                className="absolute -left-2 -top-2 w-4 h-4 bg-white border-2 border-cyan-500 rounded-sm cursor-nw-resize pointer-events-auto hover:bg-cyan-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleTextHandleMouseDown(e, "nw")}
-              />
-              <div
-                className="absolute -right-2 -top-2 w-4 h-4 bg-white border-2 border-cyan-500 rounded-sm cursor-ne-resize pointer-events-auto hover:bg-cyan-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleTextHandleMouseDown(e, "ne")}
-              />
-              <div
-                className="absolute -left-2 -bottom-2 w-4 h-4 bg-white border-2 border-cyan-500 rounded-sm cursor-sw-resize pointer-events-auto hover:bg-cyan-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleTextHandleMouseDown(e, "sw")}
-              />
-              <div
-                className="absolute -right-2 -bottom-2 w-4 h-4 bg-white border-2 border-cyan-500 rounded-sm cursor-se-resize pointer-events-auto hover:bg-cyan-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleTextHandleMouseDown(e, "se")}
-              />
-
-              {/* Edge resize handles */}
-              <div
-                className="absolute left-1/2 -translate-x-1/2 -top-2 w-6 h-4 bg-white border-2 border-cyan-500 rounded-sm cursor-n-resize pointer-events-auto hover:bg-cyan-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleTextHandleMouseDown(e, "n")}
-              />
-              <div
-                className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-6 h-4 bg-white border-2 border-cyan-500 rounded-sm cursor-s-resize pointer-events-auto hover:bg-cyan-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleTextHandleMouseDown(e, "s")}
-              />
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -left-2 w-4 h-6 bg-white border-2 border-cyan-500 rounded-sm cursor-w-resize pointer-events-auto hover:bg-cyan-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleTextHandleMouseDown(e, "w")}
-              />
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -right-2 w-4 h-6 bg-white border-2 border-cyan-500 rounded-sm cursor-e-resize pointer-events-auto hover:bg-cyan-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleTextHandleMouseDown(e, "e")}
-              />
-              </>)}
-            </div>
+            <TransformOverlay
+              bounds={textClipBounds}
+              tone="cyan"
+              moveTitle="Drag to move text"
+              hideControls={hideControls}
+              lockAspectRatio={lockAspectRatio}
+              onMoveMouseDown={handleTextClipMouseDown}
+              onHandleMouseDown={handleTextHandleMouseDown}
+              onLockAspectRatioChange={setLockAspectRatio}
+            />
           )}
 
           {/* Shape Clip Resize/Transform Overlay */}
           {showShapeClipHandles && shapeClipBounds && (
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                left: shapeClipBounds.x,
-                top: shapeClipBounds.y,
-                width: shapeClipBounds.width,
-                height: shapeClipBounds.height,
-              }}
-            >
-              {selectedShapeClip.type !== "svg" && (
-                <div className="absolute inset-0 border-2 border-green-500 pointer-events-none" />
-              )}
-
-              {!hideControls && (<>
-              {/* Move handle (center) */}
-              <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-green-500/80 rounded-full flex items-center justify-center cursor-move pointer-events-auto hover:bg-green-500 transition-colors"
-                onMouseDown={handleShapeClipMouseDown}
-                title="Drag to move shape"
-              >
-                <Move size={14} className="text-white" />
-              </div>
-
-              {/* Aspect ratio lock toggle */}
-              <Button
-                label={lockAspectRatio ? "Unlock aspect ratio" : "Lock aspect ratio"}
-                variant="ghost"
-                className={`absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 text-[10px] rounded pointer-events-auto transition-colors ${
-                  lockAspectRatio
-                    ? "bg-green-500 text-white"
-                    : "bg-background-tertiary text-text-secondary border border-border hover:bg-background-elevated"
-                }`}
-                onClick={() => setLockAspectRatio(!lockAspectRatio)}
-              >
-                {lockAspectRatio ? "🔒 Locked" : "🔓 Free"}
-              </Button>
-
-              {/* Corner resize handles */}
-              <div
-                className="absolute -left-2 -top-2 w-4 h-4 bg-white border-2 border-green-500 rounded-sm cursor-nw-resize pointer-events-auto hover:bg-green-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleShapeHandleMouseDown(e, "nw")}
-              />
-              <div
-                className="absolute -right-2 -top-2 w-4 h-4 bg-white border-2 border-green-500 rounded-sm cursor-ne-resize pointer-events-auto hover:bg-green-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleShapeHandleMouseDown(e, "ne")}
-              />
-              <div
-                className="absolute -left-2 -bottom-2 w-4 h-4 bg-white border-2 border-green-500 rounded-sm cursor-sw-resize pointer-events-auto hover:bg-green-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleShapeHandleMouseDown(e, "sw")}
-              />
-              <div
-                className="absolute -right-2 -bottom-2 w-4 h-4 bg-white border-2 border-green-500 rounded-sm cursor-se-resize pointer-events-auto hover:bg-green-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleShapeHandleMouseDown(e, "se")}
-              />
-
-              {/* Edge resize handles */}
-              <div
-                className="absolute left-1/2 -translate-x-1/2 -top-2 w-6 h-4 bg-white border-2 border-green-500 rounded-sm cursor-n-resize pointer-events-auto hover:bg-green-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleShapeHandleMouseDown(e, "n")}
-              />
-              <div
-                className="absolute left-1/2 -translate-x-1/2 -bottom-2 w-6 h-4 bg-white border-2 border-green-500 rounded-sm cursor-s-resize pointer-events-auto hover:bg-green-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleShapeHandleMouseDown(e, "s")}
-              />
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -left-2 w-4 h-6 bg-white border-2 border-green-500 rounded-sm cursor-w-resize pointer-events-auto hover:bg-green-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleShapeHandleMouseDown(e, "w")}
-              />
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -right-2 w-4 h-6 bg-white border-2 border-green-500 rounded-sm cursor-e-resize pointer-events-auto hover:bg-green-500 hover:border-white transition-colors"
-                onMouseDown={(e) => handleShapeHandleMouseDown(e, "e")}
-              />
-              </>)}
-            </div>
+            <TransformOverlay
+              bounds={shapeClipBounds}
+              tone="green"
+              moveTitle="Drag to move shape"
+              hideControls={hideControls}
+              lockAspectRatio={lockAspectRatio}
+              showBorder={selectedShapeClip.type !== "svg"}
+              responsiveBorder={false}
+              onMoveMouseDown={handleShapeClipMouseDown}
+              onHandleMouseDown={handleShapeHandleMouseDown}
+              onLockAspectRatioChange={setLockAspectRatio}
+            />
           )}
 
           {/* Subtitle Selection Overlay */}
           {showSubtitleOverlay && subtitleBounds && (
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                left: subtitleBounds.x,
-                top: subtitleBounds.y,
-                width: subtitleBounds.width,
-                height: subtitleBounds.height,
-              }}
-            >
-              {/* Selection border - yellow/orange for subtitles */}
-              <div className="absolute inset-0 border-2 border-yellow-500 rounded-lg pointer-events-none animate-pulse" />
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-yellow-500 rounded text-[10px] font-medium text-black whitespace-nowrap">
-                Subtitle Selected - Edit in Inspector
-              </div>
-            </div>
+            <SubtitleSelectionOverlay bounds={subtitleBounds} />
           )}
 
           {/* Graphic Clip Hover Indicators */}
@@ -8089,306 +6235,43 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
 
       {/* Player Controls with integrated Scrub Bar (hidden in the Hawsh phone editor, which draws its own play button) */}
       {!hideControls && (
-      <div
-        className={`shrink-0 border-t border-border transition-all duration-300 ${
-          isMaximized || isFullscreen
-            ? "z-50 bg-bg-1 backdrop-blur-sm"
-            : "z-20 bg-bg-1"
-        }`}
-      >
-        {/* Scrub Bar - integrated at top of controls */}
-        <div
-          className="h-1.5 bg-bg-2 cursor-pointer group hover:h-2.5 transition-all relative"
-          onClick={handleScrubClick}
-        >
-          <div
-            className="h-full bg-accent relative pointer-events-none shadow-glow"
-            style={{ width: `${progressPercentage}%` }}
-          >
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity transform scale-0 group-hover:scale-100 duration-100 border border-black/20" />
-          </div>
-        </div>
-
-        {/* Controls row */}
-        <div data-preview-transport className="min-h-12 px-3 py-1 flex flex-wrap items-center gap-2">
-        <div data-preview-timecode className="flex items-center gap-2">
-          <PreviewTimecode position={playheadPosition} duration={actualEndTime} frameRate={settings.frameRate}
-            disabled={Boolean(playbackLockedReason) || exportState.isExporting} />
-        </div>
-
-        <div data-preview-playback className="flex items-center gap-4 mx-auto">
-          <IconButton
-            label="Skip back 5s"
-            icon={<SkipBack size={18} />}
-            variant="ghost"
-            size="sm"
-            onClick={handleSkipBack}
-            className="w-8 h-8 grid place-items-center rounded-md text-fg-2 hover:bg-hover hover:text-fg transition-colors"
-          />
-          <IconButton
-            label={playbackLockedReason ?? (isPlaying ? "Pause" : "Play")}
-            icon={
-              isPlaying ? (
-                <Pause size={18} fill="currentColor" />
-              ) : playbackLockedReason ? (
-                <Loader2 size={18} className="animate-spin" />
-              ) : (
-                <Play size={18} fill="currentColor" className="ml-0.5" />
-              )
-            }
-            variant="ghost"
-            size="md"
-            onClick={() => {
-              togglePlayback();
-            }}
-            isDisabled={Boolean(playbackLockedReason)}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-              playbackLockedReason
-                ? "bg-bg-2 text-fg-muted cursor-not-allowed"
-                : "bg-bg-2 text-fg hover:bg-bg-3"
-            }`}
-          />
-          <IconButton
-            label="Skip forward 5s"
-            icon={<SkipForward size={18} />}
-            variant="ghost"
-            size="sm"
-            onClick={handleSkipForward}
-            className="w-8 h-8 grid place-items-center rounded-md text-fg-2 hover:bg-hover hover:text-fg transition-colors"
-          />
-        </div>
-
-        <div data-preview-tools className="flex gap-1.5 items-center">
-          <IconButton
-            label={loopEnabled ? "Disable preview loop" : "Enable preview loop"}
-            title={`Loop ${formatFrameTimecode(previewLoopRange?.start ?? 0, settings.frameRate)} to ${formatFrameTimecode(previewLoopRange?.end ?? 0, settings.frameRate)} • I: mark start • O: mark end • Shift+L: toggle`}
-            icon={<Repeat size={16} />}
-            aria-pressed={loopEnabled}
-            variant="ghost"
-            size="sm"
-            onClick={handleToggleLoop}
-            isDisabled={actualEndTime <= 0 || exportState.isExporting}
-            className={`w-[34px] h-[34px] grid place-items-center rounded-[7px] transition-colors ${loopEnabled ? "bg-accent/15 text-accent" : "bg-bg-2 text-fg-2 hover:bg-bg-3 hover:text-fg"}`}
-          />
-          <IconButton
-            label={isMuted ? "Unmute" : "Mute"}
-            icon={isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsMuted(!isMuted)}
-            className={`w-[34px] h-[34px] grid place-items-center rounded-[7px] transition-colors ${
-              isMuted
-                ? "bg-bg-2 text-status-error"
-                : "bg-bg-2 text-fg-2 hover:text-fg hover:bg-bg-3"
-            }`}
-          />
-
-          {/* Aspect ratio (project canvas size) */}
-          <div className="relative">
-            <Button
-              label="Aspect ratio"
-              variant="ghost"
-              onClick={() => setShowAspectMenu(!showAspectMenu)}
-              className="flex items-center gap-1.5 rounded-[7px] bg-bg-2 px-[11px] py-[7px] text-[12px] font-medium text-fg-2 hover:bg-bg-3 hover:text-fg transition-colors"
-            >
-              <div className="flex items-center gap-1">
-                <Proportions size={12} />
-                <span>{aspectLabelFor(settings.width, settings.height)}</span>
-              </div>
-            </Button>
-            {showAspectMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowAspectMenu(false)}
-                />
-                <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-bg-elev border border-border rounded-md shadow-md py-1 z-50 min-w-[120px]">
-                  {ASPECT_PRESETS.map((opt) => {
-                    const isActive =
-                      settings.width === opt.width &&
-                      settings.height === opt.height;
-                    return (
-                      <Button
-                        key={opt.label}
-                        label={`${opt.label} ${opt.width} by ${opt.height}`}
-                        variant="ghost"
-                        onClick={() => {
-                          void updateSettings({
-                            width: opt.width,
-                            height: opt.height,
-                          });
-                          setShowAspectMenu(false);
-                        }}
-                        className={`w-full px-3 py-1.5 text-[11px] font-mono text-left hover:bg-hover transition-colors flex items-center justify-between gap-3 ${
-                          isActive ? "text-accent" : "text-fg-2"
-                        }`}
-                        >
-                        <span>{opt.label}</span>
-                        <span className="text-fg-3 text-[10px]">
-                          {opt.width}×{opt.height}
-                        </span>
-                      </Button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Playback Quality (render resolution) */}
-          <div className="relative">
-            <Button
-              label="Playback quality"
-              variant="ghost"
-              onClick={() => setShowQualityMenu(!showQualityMenu)}
-              className="rounded-[7px] bg-bg-2 px-[11px] py-[7px] text-[12px] font-medium text-fg-2 hover:bg-bg-3 hover:text-fg transition-colors"
-            >
-              {PREVIEW_QUALITY_OPTIONS.find((o) => o.value === playbackQuality)
-                ?.label ?? "Auto"}
-            </Button>
-            {showQualityMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowQualityMenu(false)}
-                />
-                <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-bg-elev border border-border rounded-md shadow-md py-1 z-50 min-w-[80px]">
-                  {PREVIEW_QUALITY_OPTIONS.map((opt) => (
-                    <Button
-                      key={opt.value}
-                      label={opt.label}
-                      variant="ghost"
-                      onClick={() => {
-                        setPlaybackQuality(opt.value);
-                        setShowQualityMenu(false);
-                      }}
-                      className={`w-full px-3 py-1.5 text-[11px] font-mono text-left hover:bg-hover transition-colors ${
-                        playbackQuality === opt.value
-                          ? "text-accent"
-                          : "text-fg-2"
-                      }`}
-                    >
-                      {opt.label}
-                    </Button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Zoom Control */}
-          <div className="relative">
-            <Button
-              label="Preview Zoom"
-              variant="ghost"
-              onClick={() => setShowZoomMenu(!showZoomMenu)}
-              className="flex items-center gap-1.5 rounded-[7px] bg-bg-2 px-[11px] py-[7px] text-[12px] font-medium text-fg-2 hover:bg-bg-3 hover:text-fg transition-colors"
-            >
-              <div className="flex items-center gap-1">
-                <ZoomIn size={12} />
-                <span>{Math.round(zoomLevel * 100)}%</span>
-              </div>
-            </Button>
-            {showZoomMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowZoomMenu(false)}
-                />
-                <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-bg-elev border border-border rounded-md shadow-md py-1 z-50 min-w-[80px]">
-                  {ZOOM_OPTIONS.map((opt) => (
-                    <Button
-                      key={opt.value}
-                      label={opt.label}
-                      variant="ghost"
-                      onClick={() => {
-                        setZoomLevel(opt.value);
-                        setShowZoomMenu(false);
-                      }}
-                      className={`w-full px-3 py-1.5 text-[11px] font-mono text-left hover:bg-hover transition-colors ${
-                        zoomLevel === opt.value
-                          ? "text-accent"
-                          : "text-fg-2"
-                      }`}
-                    >
-                      {opt.label}
-                    </Button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-
-          <IconButton
-            label="Canvas snapping"
-            icon={<Magnet size={16} />}
-            variant="ghost"
-            size="sm"
-            aria-pressed={canvasSnappingEnabled}
-            onClick={() => {
-              setCanvasSnappingEnabled((enabled) => !enabled);
-              setCanvasSnapGuides({ x: null, y: null });
-            }}
-            className={`w-[34px] h-[34px] grid place-items-center rounded-[7px] transition-colors ${
-              canvasSnappingEnabled
-                ? "bg-accent-soft text-accent"
-                : "bg-bg-2 text-fg-2 hover:text-fg hover:bg-bg-3"
-            }`}
-          />
-          <IconButton
-            label="Composition grid"
-            icon={<Move size={16} />}
-            variant="ghost"
-            size="sm"
-            aria-pressed={showCompositionGrid}
-            onClick={() => setShowCompositionGrid((visible) => !visible)}
-            className={`w-[34px] h-[34px] grid place-items-center rounded-[7px] transition-colors ${
-              showCompositionGrid
-                ? "bg-accent-soft text-accent"
-                : "bg-bg-2 text-fg-2 hover:text-fg hover:bg-bg-3"
-            }`}
-          />
-          <IconButton
-            label="Title and action safe margins"
-            icon={<Proportions size={16} />}
-            variant="ghost"
-            size="sm"
-            aria-pressed={showSafeMargins}
-            onClick={() => setShowSafeMargins((visible) => !visible)}
-            className={`w-[34px] h-[34px] grid place-items-center rounded-[7px] transition-colors ${
-              showSafeMargins
-                ? "bg-accent-soft text-accent"
-                : "bg-bg-2 text-fg-2 hover:text-fg hover:bg-bg-3"
-            }`}
-          />
-
-          <IconButton
-            label={isFullscreen ? "Exit Full Screen" : "Full Screen"}
-            icon={<Monitor size={16} />}
-            variant="ghost"
-            size="sm"
-            onClick={handleFullscreen}
-            className={`w-[34px] h-[34px] grid place-items-center rounded-[7px] transition-colors ${
-              isFullscreen
-                ? "bg-accent-soft text-accent"
-                : "bg-bg-2 text-fg-2 hover:text-fg hover:bg-bg-3"
-            }`}
-          />
-          <IconButton
-            label={isMaximized ? "Restore Size" : "Maximize Preview"}
-            icon={isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            variant="ghost"
-            size="sm"
-            onClick={handleMaximize}
-            className={`w-[34px] h-[34px] grid place-items-center rounded-[7px] transition-colors ${
-              isMaximized
-                ? "bg-accent-soft text-accent"
-                : "bg-bg-2 text-fg-2 hover:text-fg hover:bg-bg-3"
-            }`}
-          />
-        </div>
-        </div>
-      </div>
+        <PreviewControls
+          settings={settings}
+          playheadPosition={playheadPosition}
+          actualEndTime={actualEndTime}
+          playbackLockedReason={playbackLockedReason}
+          isPlaying={isPlaying}
+          isExporting={exportState.isExporting}
+          loopEnabled={loopEnabled}
+          previewLoopRange={previewLoopRange}
+          isMuted={isMuted}
+          playbackQuality={playbackQuality}
+          zoomLevel={zoomLevel}
+          canvasSnappingEnabled={canvasSnappingEnabled}
+          showCompositionGrid={showCompositionGrid}
+          showSafeMargins={showSafeMargins}
+          isMaximized={isMaximized}
+          isFullscreen={isFullscreen}
+          onScrubClick={handleScrubClick}
+          onSkipBack={handleSkipBack}
+          onSkipForward={handleSkipForward}
+          onTogglePlayback={togglePlayback}
+          onToggleLoop={handleToggleLoop}
+          onMutedChange={setIsMuted}
+          onAspectRatioChange={(width, height) => {
+            void updateSettings({ width, height });
+          }}
+          onPlaybackQualityChange={setPlaybackQuality}
+          onZoomLevelChange={setZoomLevel}
+          onToggleCanvasSnapping={() => {
+            setCanvasSnappingEnabled((enabled) => !enabled);
+            setCanvasSnapGuides({ x: null, y: null });
+          }}
+          onShowCompositionGridChange={setShowCompositionGrid}
+          onShowSafeMarginsChange={setShowSafeMargins}
+          onFullscreen={handleFullscreen}
+          onMaximize={handleMaximize}
+        />
       )}
     </div>
   );

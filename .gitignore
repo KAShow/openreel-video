@@ -36,6 +36,9 @@ yarn-error.log*
 # Testing
 coverage/
 .nyc_output/
+apps/web/test-results/
+apps/web/playwright-report/
+/.playwright-browsers/
 
 # Temporary files
 *.tmp
@@ -106,3 +109,7 @@ xcuserdata/
 .codex-audit/
 .codex/
 **/local.properties
+
+# Local tool caches
+.npm-cache/
+.claude/

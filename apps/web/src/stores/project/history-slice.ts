@@ -7,7 +7,7 @@ import type {
   StickerClip,
 } from "@openreel/core";
 import { getTrackItems } from "@openreel/core";
-import type { ProjectState } from "../project-store";
+import type { ProjectState } from "./types";
 import type { ProjectStoreHelpers } from "./store-helpers";
 import type {
   EditingTemplateHistoryEntry,

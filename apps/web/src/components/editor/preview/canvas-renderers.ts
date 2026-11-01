@@ -835,13 +835,14 @@ const renderSVGClip = (
       case "fade":
         animationOpacity *= eased;
         break;
-      case "scale":
+      case "scale": {
         const scale = eased;
         animationScale = {
           x: animationScale.x * scale,
           y: animationScale.y * scale,
         };
         break;
+      }
       case "slide-left":
         animationTranslateX = -(1 - eased) * canvasWidth;
         break;
@@ -858,7 +859,7 @@ const renderSVGClip = (
         ctx.rotate((1 - eased) * Math.PI * 2);
         animationOpacity *= eased;
         break;
-      case "bounce":
+      case "bounce": {
         const bounceProgress =
           eased < 0.5 ? 2 * eased * eased : 1 - Math.pow(-2 * eased + 2, 2) / 2;
         animationScale = {
@@ -867,13 +868,15 @@ const renderSVGClip = (
         };
         animationOpacity *= eased;
         break;
-      case "pop":
+      }
+      case "pop": {
         const popScale = eased < 0.5 ? eased * 2.2 : 1 + (1 - eased) * 0.2;
         animationScale = {
           x: animationScale.x * popScale,
           y: animationScale.y * popScale,
         };
         break;
+      }
       case "draw":
         drawProgress = eased;
         animationOpacity *= Math.min(1, eased * 2);
@@ -910,7 +913,7 @@ const renderSVGClip = (
           height: (viewBox?.height || 200) * eased,
         };
         break;
-      case "reveal-center":
+      case "reveal-center": {
         const centerScale = eased;
         animationScale = {
           x: animationScale.x * centerScale,
@@ -923,6 +926,7 @@ const renderSVGClip = (
           height: (viewBox?.height || 200) * eased,
         };
         break;
+      }
       case "reveal-edges":
         clipRect = {
           x: (viewBox?.width || 200) * eased * 0.5,
@@ -931,7 +935,7 @@ const renderSVGClip = (
           height: (viewBox?.height || 200) * (1 - eased),
         };
         break;
-      case "elastic":
+      case "elastic": {
         const elasticScale =
           eased < 0.5
             ? 4 * eased * eased * eased
@@ -942,6 +946,7 @@ const renderSVGClip = (
           y: animationScale.y * overshoot,
         };
         break;
+      }
       case "flip-horizontal":
         animationScale = {
           x: animationScale.x * Math.cos(eased * Math.PI),
@@ -972,13 +977,14 @@ const renderSVGClip = (
       case "fade":
         animationOpacity *= 1 - eased;
         break;
-      case "scale":
+      case "scale": {
         const scale = 1 - eased;
         animationScale = {
           x: animationScale.x * scale,
           y: animationScale.y * scale,
         };
         break;
+      }
       case "slide-left":
         animationTranslateX = -eased * canvasWidth;
         break;
@@ -995,7 +1001,7 @@ const renderSVGClip = (
         ctx.rotate(eased * Math.PI * 2);
         animationOpacity *= 1 - eased;
         break;
-      case "bounce":
+      case "bounce": {
         const bounceOut =
           1 -
           (eased < 0.5
@@ -1007,13 +1013,15 @@ const renderSVGClip = (
         };
         animationOpacity *= 1 - eased;
         break;
-      case "pop":
+      }
+      case "pop": {
         const popOutScale = eased < 0.5 ? 1 - eased * 0.2 : 1 - eased * 2.2;
         animationScale = {
           x: animationScale.x * Math.max(0, popOutScale),
           y: animationScale.y * Math.max(0, popOutScale),
         };
         break;
+      }
       case "draw":
         drawProgress = 1 - eased;
         animationOpacity *= Math.max(0, 1 - eased * 2);
@@ -1066,7 +1074,7 @@ const renderSVGClip = (
           height: (viewBox?.height || 200) * eased,
         };
         break;
-      case "elastic":
+      case "elastic": {
         const elasticOut =
           1 -
           (eased < 0.5
@@ -1077,6 +1085,7 @@ const renderSVGClip = (
           y: animationScale.y * Math.max(0, elasticOut),
         };
         break;
+      }
       case "flip-horizontal":
         animationScale = {
           x: animationScale.x * Math.cos((1 - eased) * Math.PI + Math.PI),
@@ -1787,7 +1796,7 @@ export const applyEffectsToFrame = async (
           if (bgResult && bgResult.width > 0 && bgResult.height > 0) {
             processedFrame = bgResult;
           }
-        } catch {}
+        } catch { /* Keep the current frame when processing fails. */ }
       }
     }
 
@@ -1819,7 +1828,7 @@ export const applyEffectsToFrame = async (
         ) {
           processedFrame = effectsResult.image;
         }
-      } catch {}
+      } catch { /* Keep the current frame when processing fails. */ }
     }
 
     if (
@@ -1838,7 +1847,7 @@ export const applyEffectsToFrame = async (
         ) {
           processedFrame = colorGradingResult.image;
         }
-      } catch {}
+      } catch { /* Keep the current frame when processing fails. */ }
     }
 
     return processedFrame;

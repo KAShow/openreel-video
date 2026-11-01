@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import type { StoreApi } from "zustand";
-import type { ProjectState } from "../project-store";
+import type { ProjectState } from "./types";
 import { useEngineStore } from "../engine-store";
 import { splitCaptionIntoSingleLineCues } from "@openreel/core";
 

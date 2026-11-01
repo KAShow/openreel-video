@@ -15,7 +15,7 @@ import type {
   TextClip,
   Text3DSettings,
 } from "@openreel/core";
-import type { ProjectState } from "../project-store";
+import type { ProjectState } from "./types";
 import type { ProjectStoreHelpers } from "./store-helpers";
 import { useEngineStore } from "../engine-store";
 

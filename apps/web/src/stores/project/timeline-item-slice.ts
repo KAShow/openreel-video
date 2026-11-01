@@ -7,7 +7,7 @@ import {
   resolveTimelinePlacement,
   withUniversalTracksCapability,
 } from "@openreel/core";
-import type { ProjectState } from "../project-store";
+import type { ProjectState } from "./types";
 import type { ProjectStoreHelpers } from "./store-helpers";
 
 type Get = StoreApi<ProjectState>["getState"];

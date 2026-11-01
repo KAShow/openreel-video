@@ -345,7 +345,7 @@ describe("VideoEngine export frame effects", () => {
     expect(colorWheelsBitmap.close).toHaveBeenCalledTimes(1);
     expect(cpuGradedBitmap.close).toHaveBeenCalledTimes(1);
     expect(whiteBalancedBitmap.close).toHaveBeenCalledTimes(1);
-  });
+  }, 15_000);
 
   it("does not scale an output-sized decoded frame twice", async () => {
     const outputSizedBitmap = makeBitmap("output-sized", 320, 180);

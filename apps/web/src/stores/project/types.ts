@@ -385,7 +385,7 @@ export interface ProjectState {
   ) => PhotoProject | null;
   importPhotoForEditing: (
     image: ImageBitmap,
-    projectId?: string,
+    name?: string,
   ) => PhotoProject | null;
   addPhotoLayer: (
     projectId: string,
@@ -475,6 +475,105 @@ export interface ProjectState {
   clearClipAudioDucking: (clipId: string) => boolean;
 
   updateClipKeyframes: (clipId: string, keyframes: Keyframe[]) => boolean;
+
+  hasOpenProject: boolean;
+  setCanvasBackground: (
+    mode: "color" | "blur" | undefined,
+    color: string | undefined,
+  ) => Promise<ActionResult>;
+  replaceMediaAsset: (
+    mediaId: string,
+    file: File,
+    sourceFolder?: string,
+  ) => Promise<ActionResult>;
+  addPlaceholderMedia: (item: MediaItem) => void;
+  replacePlaceholderMedia: (
+    mediaId: string,
+    blob: Blob,
+    name: string,
+  ) => Promise<void>;
+  setKieAIItemState: (
+    mediaId: string,
+    isPending: boolean,
+    kieaiError: boolean,
+  ) => void;
+  renameTrack: (trackId: string, name: string) => Promise<ActionResult>;
+  addClipToNewTrack: (
+    mediaId: string,
+    startTime?: number,
+  ) => Promise<ActionResult>;
+  moveClips: (
+    moves: Array<{ clipId: string; startTime: number; trackId?: string }>,
+  ) => Promise<ActionResult>;
+  beginHistoryGroup: (description?: string) => void;
+  endHistoryGroup: () => void;
+  closeGapBeforeClip: (clipId: string) => Promise<ActionResult>;
+  consolidateTrack: (trackId: string) => Promise<ActionResult>;
+  separateAudio: (clipId: string) => Promise<ActionResult>;
+  updateClipBlendMode: (
+    clipId: string,
+    blendMode: import("@openreel/core").BlendMode,
+  ) => Promise<ActionResult>;
+  updateClipBlendOpacity: (
+    clipId: string,
+    opacity: number,
+  ) => Promise<ActionResult>;
+  updateClipRotate3D: (
+    clipId: string,
+    rotate3d: { x: number; y: number; z: number },
+  ) => boolean;
+  updateClipPerspective: (clipId: string, perspective: number) => boolean;
+  updateClipTransformStyle: (
+    clipId: string,
+    transformStyle: "flat" | "preserve-3d",
+  ) => boolean;
+  updateClipEmphasisAnimation: (
+    clipId: string,
+    emphasisAnimation: import("@openreel/core").EmphasisAnimation,
+  ) => Promise<ActionResult>;
+  updateMotionCompositionPreview: (composition: MotionComposition) => void;
+  commitMotionCompositionGesture: (
+    before: MotionComposition,
+    after: MotionComposition,
+  ) => Promise<ActionResult | null>;
+  updateCreationObject: (
+    sceneId: string,
+    objectId: string,
+    patch: import("../../motion/creation-object-editing").CreationObjectEditPatch,
+  ) => Promise<ActionResult>;
+  updateCreationCamera: (
+    sceneId: string,
+    cameraId: string | undefined,
+    patch: import("../../motion/creation-camera-editing").CreationCameraEditPatch,
+  ) => Promise<ActionResult>;
+  recoverMotionScene3DLayer: (
+    compositionId: string,
+    layerId: string,
+  ) => Promise<ActionResult>;
+  addMarker: (
+    time: number,
+    label?: string,
+    color?: string,
+  ) => Promise<ActionResult>;
+  removeMarker: (markerId: string) => Promise<ActionResult>;
+  updateMarker: (
+    markerId: string,
+    updates: Partial<import("@openreel/core").Marker>,
+  ) => Promise<ActionResult>;
+  getMarker: (markerId: string) => import("@openreel/core").Marker | undefined;
+  getMarkers: () => import("@openreel/core").Marker[];
+  getSVGClipById: (clipId: string) => SVGClip | undefined;
+  updateSVGClip: (
+    clipId: string,
+    updates: {
+      startTime?: number;
+      duration?: number;
+      transform?: Partial<Transform>;
+      entryAnimation?: import("@openreel/core").GraphicAnimation;
+      exitAnimation?: import("@openreel/core").GraphicAnimation;
+      colorStyle?: import("@openreel/core").SVGColorStyle;
+    },
+  ) => SVGClip | null;
 
   undo: () => Promise<ActionResult>;
   redo: () => Promise<ActionResult>;
