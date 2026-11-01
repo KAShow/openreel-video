@@ -4,7 +4,7 @@
  * charged from the user's points); Settings → AI Editor shows a notice instead of provider/key fields
  * (AIConnectionNotice.tsx) and chat-store refuses any other connection.
  */
-import { LLMHttpError, makeClientFromSend, parseRetryAfterMs, withRetry, type LLMClient } from "@openreel/agent";
+import { LLMHttpError, makeClientFromSend, parseRetryAfterMs, withRetry, type LLMClient } from "@openreel/agent/llm";
 import { useAIConnectionStore } from "../stores/ai-connection-store";
 import { HAWSH_SUPABASE_URL } from "./config";
 import { hawshClient } from "./session";
