@@ -4,10 +4,14 @@ import { RecentProjects } from "./RecentProjects";
 
 const mockCheckForRecovery = vi.fn();
 const mockRecoverFromAutoSave = vi.fn();
+const mockClearProjectSaves = vi.fn();
 const mockTrack = vi.fn();
 
 vi.mock("../../services/auto-save", () => ({
   checkForRecovery: () => mockCheckForRecovery(),
+  autoSaveManager: {
+    clearProjectSaves: (projectId: string) => mockClearProjectSaves(projectId),
+  },
 }));
 
 vi.mock("../../stores/project-store", () => ({
@@ -20,104 +24,105 @@ vi.mock("../../hooks/useAnalytics", () => ({
   useAnalytics: () => ({ track: mockTrack }),
 }));
 
+function makeSave(
+  projectId: string,
+  projectName: string,
+  timestamp: number = Date.now(),
+  slot = 0,
+) {
+  return {
+    id: `${projectId}-slot-${slot}`,
+    projectId,
+    projectName,
+    timestamp,
+    slot,
+    isRecovery: true,
+  };
+}
+
 describe("RecentProjects", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClearProjectSaves.mockResolvedValue(undefined);
   });
 
-  it("shows loading state initially", () => {
+  it("shows loading skeletons initially", () => {
     mockCheckForRecovery.mockReturnValue(new Promise(() => {}));
     render(<RecentProjects />);
-    expect(screen.getByText("Loading recent projects...")).toBeInTheDocument();
+    expect(screen.getByText("جاري تحميل مشاريعك…")).toBeInTheDocument();
   });
 
-  it("shows empty state when no projects", async () => {
+  it("shows a localized empty state and create action", async () => {
     mockCheckForRecovery.mockResolvedValue([]);
-    render(<RecentProjects />);
+    const onCreateProject = vi.fn();
+    render(<RecentProjects onCreateProject={onCreateProject} />);
 
-    await waitFor(() => {
-      expect(screen.getByText("No Recent Projects")).toBeInTheDocument();
+    const createButton = await screen.findByRole("button", {
+      name: "إنشاء مشروع جديد",
     });
+    fireEvent.click(createButton);
+    expect(onCreateProject).toHaveBeenCalledOnce();
   });
 
-  it("displays recent projects from auto-save", async () => {
+  it("deduplicates saves and displays the latest version of each project", async () => {
     mockCheckForRecovery.mockResolvedValue([
-      {
-        id: "project-1-slot-0",
-        projectId: "project-1",
-        projectName: "My Video Project",
-        timestamp: Date.now() - 3600000,
-        slot: 0,
-        isRecovery: true,
-      },
-      {
-        id: "project-2-slot-0",
-        projectId: "project-2",
-        projectName: "Another Project",
-        timestamp: Date.now() - 7200000,
-        slot: 0,
-        isRecovery: true,
-      },
+      makeSave("project-1", "Project v2", Date.now(), 1),
+      makeSave("project-1", "Project v1", Date.now() - 3600000, 0),
+      makeSave("project-2", "Another Project"),
     ]);
 
     render(<RecentProjects />);
 
-    await waitFor(() => {
-      expect(screen.getByText("My Video Project")).toBeInTheDocument();
-      expect(screen.getByText("Another Project")).toBeInTheDocument();
-    });
+    expect(await screen.findByRole("heading", { name: "Project v2" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Another Project" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Project v1" })).not.toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
   });
 
-  it("deduplicates projects by projectId showing most recent", async () => {
+  it("filters projects by name and clears an empty search", async () => {
     mockCheckForRecovery.mockResolvedValue([
-      {
-        id: "project-1-slot-1",
-        projectId: "project-1",
-        projectName: "Project v2",
-        timestamp: Date.now(),
-        slot: 1,
-        isRecovery: true,
-      },
-      {
-        id: "project-1-slot-0",
-        projectId: "project-1",
-        projectName: "Project v1",
-        timestamp: Date.now() - 3600000,
-        slot: 0,
-        isRecovery: true,
-      },
+      makeSave("project-1", "Launch video"),
+      makeSave("project-2", "Wedding film"),
     ]);
-
     render(<RecentProjects />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Recent Projects (1)")).toBeInTheDocument();
-      expect(screen.getByText("Project v2")).toBeInTheDocument();
-      expect(screen.queryByText("Project v1")).not.toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Launch video" });
+    fireEvent.change(screen.getByLabelText("ابحث في مشاريعك"), {
+      target: { value: "missing" },
     });
+
+    expect(screen.getByRole("heading", { name: "لا توجد نتائج مطابقة" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "مسح البحث والتصفية" }));
+    expect(screen.getByRole("heading", { name: "Launch video" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Wedding film" })).toBeInTheDocument();
   });
 
-  it("calls recoverFromAutoSave when project is selected", async () => {
+  it("filters projects by modification date", async () => {
     mockCheckForRecovery.mockResolvedValue([
-      {
-        id: "project-1-slot-0",
-        projectId: "project-1",
-        projectName: "Test Project",
-        timestamp: Date.now(),
-        slot: 0,
-        isRecovery: true,
-      },
+      makeSave("project-1", "Recent edit", Date.now() - 86_400_000),
+      makeSave("project-2", "Old edit", Date.now() - 40 * 86_400_000),
     ]);
+    render(<RecentProjects />);
+
+    await screen.findByRole("heading", { name: "Recent edit" });
+    fireEvent.change(screen.getByLabelText("تصفية حسب تاريخ التعديل"), {
+      target: { value: "week" },
+    });
+
+    expect(screen.getByRole("heading", { name: "Recent edit" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Old edit" })).not.toBeInTheDocument();
+  });
+
+  it("opens the selected auto-save", async () => {
+    mockCheckForRecovery.mockResolvedValue([makeSave("project-1", "Test Project")]);
     mockRecoverFromAutoSave.mockResolvedValue(true);
     const onProjectSelected = vi.fn();
 
     render(<RecentProjects onProjectSelected={onProjectSelected} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Test Project")).toBeInTheDocument();
+    const openButton = await screen.findByRole("button", {
+      name: "فتح مشروع Test Project",
     });
-
-    fireEvent.click(screen.getByText("Test Project"));
+    fireEvent.click(openButton);
 
     await waitFor(() => {
       expect(mockRecoverFromAutoSave).toHaveBeenCalledWith("project-1-slot-0");
@@ -125,49 +130,35 @@ describe("RecentProjects", () => {
     });
   });
 
-  it("removes project from list when delete is clicked", async () => {
+  it("asks for confirmation before permanently deleting a project", async () => {
     mockCheckForRecovery.mockResolvedValue([
-      {
-        id: "project-1-slot-0",
-        projectId: "project-1",
-        projectName: "Project to Remove",
-        timestamp: Date.now(),
-        slot: 0,
-        isRecovery: true,
-      },
+      makeSave("project-1", "Project to Remove"),
     ]);
-
     render(<RecentProjects />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Project to Remove")).toBeInTheDocument();
+    const removeButton = await screen.findByRole("button", {
+      name: "حذف مشروع Project to Remove",
     });
-
-    const removeButton = screen.getByTitle("Remove from recent");
     fireEvent.click(removeButton);
+    expect(mockClearProjectSaves).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "حذف المشروع" }));
 
     await waitFor(() => {
-      expect(screen.queryByText("Project to Remove")).not.toBeInTheDocument();
-      expect(screen.getByText("No Recent Projects")).toBeInTheDocument();
+      expect(mockClearProjectSaves).toHaveBeenCalledWith("project-1");
+      expect(screen.queryByRole("heading", { name: "Project to Remove" })).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "ابدأ أول مشروع لك" })).toBeInTheDocument();
     });
   });
 
-  it("shows relative dates for timestamps", async () => {
-    mockCheckForRecovery.mockResolvedValue([
-      {
-        id: "project-1-slot-0",
-        projectId: "project-1",
-        projectName: "Today Project",
-        timestamp: Date.now() - 1000,
-        slot: 0,
-        isRecovery: true,
-      },
-    ]);
-
+  it("offers a retry when loading fails", async () => {
+    mockCheckForRecovery.mockRejectedValueOnce(new Error("Storage unavailable"));
+    mockCheckForRecovery.mockResolvedValueOnce([makeSave("project-1", "Recovered Project")]);
     render(<RecentProjects />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Today")).toBeInTheDocument();
-    });
+    const retryButton = await screen.findByRole("button", { name: "إعادة المحاولة" });
+    fireEvent.click(retryButton);
+
+    expect(await screen.findByRole("heading", { name: "Recovered Project" })).toBeInTheDocument();
   });
 });

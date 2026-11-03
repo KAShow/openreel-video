@@ -5,11 +5,22 @@ import { ToolcraftClickableCard as ClickableCard } from "@openreel/ui";
 import { ToolcraftSelectControl as Selector } from "@openreel/ui";
 import { ToolcraftText as Text } from "@openreel/ui";
 import { ToolcraftTextInputControl } from "@openreel/ui";
+import { ToolcraftSliderControl } from "@openreel/ui";
 import { RotateCcw, Sparkles } from "@/icons/lucide-compat";
 import type { Clip } from "@openreel/core";
 import { getMediaItemCapabilities, getSpeedEngine } from "@openreel/core";
 import { useProjectStore } from "../../../stores/project-store";
 import { MockToggle } from "./shell/InspectorControls";
+import {
+  SPEED_MAX,
+  SPEED_MIN,
+  SPEED_SLIDER_MAX,
+  SPEED_STEP,
+  durationAtSpeed,
+  formatSeconds,
+  formatSpeed,
+  parseSpeedInput,
+} from "./speed-utils";
 
 interface SpeedSectionProps {
   clip: Clip;
@@ -43,9 +54,10 @@ export const SpeedSection: React.FC<SpeedSectionProps> = ({ clip }) => {
     currentSpeed.toString(),
   );
   const [affectAudio, setAffectAudio] = useState(true);
+  const [inputNote, setInputNote] = useState<"invalid" | "clamped" | null>(null);
 
   useEffect(() => {
-    setCustomSpeed(currentSpeed.toString());
+    setCustomSpeed(Number(currentSpeed.toFixed(2)).toString());
   }, [currentSpeed]);
 
   const hasAudio = () => {
@@ -121,19 +133,27 @@ export const SpeedSection: React.FC<SpeedSectionProps> = ({ clip }) => {
     }
   };
 
-  const handleSpeedPreset = (speed: number) => {
+  const applySpeed = (speed: number) => {
     speedEngine.setClipSpeed(clip.id, speed, clip.duration);
     updateClipDuration(speed);
     setCurrentSpeed(speed);
   };
 
+  const handleSpeedPreset = (speed: number) => {
+    setInputNote(null);
+    applySpeed(speed);
+  };
+
   const handleCustomSpeed = () => {
-    const speed = parseFloat(customSpeed);
-    if (!isNaN(speed) && speed >= 0.1 && speed <= 100) {
-      speedEngine.setClipSpeed(clip.id, speed, clip.duration);
-      updateClipDuration(speed);
-      setCurrentSpeed(speed);
+    const result = parseSpeedInput(customSpeed);
+    if (!result.ok) {
+      setInputNote("invalid");
+      setCustomSpeed(Number(currentSpeed.toFixed(2)).toString());
+      return;
     }
+    setInputNote(result.clamped ? "clamped" : null);
+    setCustomSpeed(result.value.toString());
+    if (result.value !== currentSpeed) applySpeed(result.value);
   };
 
   const handleToggleReverse = () => {
@@ -152,7 +172,7 @@ export const SpeedSection: React.FC<SpeedSectionProps> = ({ clip }) => {
             label={`Set speed to ${preset.label}`}
             onClick={() => handleSpeedPreset(preset.value)}
             className={`px-3 py-2 text-xs font-medium rounded-lg transition-all ${
-              currentSpeed === preset.value
+              Math.abs(currentSpeed - preset.value) < SPEED_STEP / 2
                 ? "bg-primary text-white shadow-lg shadow-primary/20"
                 : "bg-bg-2 hover:bg-bg-elev text-fg-2 hover:text-fg border border-border"
             }`}
@@ -163,11 +183,25 @@ export const SpeedSection: React.FC<SpeedSectionProps> = ({ clip }) => {
       </div>
 
       <div className="space-y-2">
+        <ToolcraftSliderControl
+          label="Speed"
+          value={Math.min(currentSpeed, SPEED_SLIDER_MAX)}
+          onChange={setCurrentSpeed}
+          onCommit={applySpeed}
+          min={SPEED_MIN}
+          max={SPEED_SLIDER_MAX}
+          step={SPEED_STEP}
+          defaultValue={1}
+          showValueLabel={false}
+        />
         <div className="flex gap-2">
           <ToolcraftTextInputControl
             label="Custom Speed"
             value={customSpeed}
-            onChange={setCustomSpeed}
+            onChange={(value) => {
+              setCustomSpeed(value);
+              setInputNote(null);
+            }}
             onBlur={handleCustomSpeed}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -180,10 +214,33 @@ export const SpeedSection: React.FC<SpeedSectionProps> = ({ clip }) => {
           <Text type="supporting" color="secondary" className="flex items-center text-xs">
             ×
           </Text>
+          {currentSpeed !== 1 && (
+            <Button
+              label="Reset speed"
+              variant="secondary"
+              size="sm"
+              icon={<RotateCcw size={14} />}
+              onClick={() => handleSpeedPreset(1)}
+            />
+          )}
         </div>
-        <Text type="supporting" color="secondary" className="text-xs">
-          Range: 0.1× (slowest) to 100× (fastest)
+        <Text
+          type="supporting"
+          color={inputNote ? "primary" : "secondary"}
+          className="text-xs"
+        >
+          {inputNote === "invalid"
+            ? "Enter a number such as 1.25"
+            : inputNote === "clamped"
+              ? "Value adjusted to the allowed range"
+              : `Range: ${SPEED_MIN}× (slowest) to ${SPEED_MAX}× (fastest)`}
         </Text>
+        {currentSpeed !== 1 && clip.outPoint > clip.inPoint && (
+          <Text type="supporting" color="secondary" className="block text-xs">
+            Clip length: {formatSeconds(clip.outPoint - clip.inPoint)} →{" "}
+            {formatSeconds(durationAtSpeed(clip.inPoint, clip.outPoint, currentSpeed))}
+          </Text>
+        )}
       </div>
 
       {hasAudio() && (
@@ -290,7 +347,7 @@ export const SpeedSection: React.FC<SpeedSectionProps> = ({ clip }) => {
             Current Settings
           </Text>
           <Text type="body" color="primary" className="block text-sm">
-            Speed: {currentSpeed}× {isReversed && "• Reversed"}
+            Speed: {formatSpeed(currentSpeed)} {isReversed && "• Reversed"}
             {clip.smoothSlowMo && " • Smooth"}
           </Text>
         </Card>

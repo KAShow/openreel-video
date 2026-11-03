@@ -9,7 +9,7 @@ function formatUpdatedAt(timestamp: number): string {
   const date = new Date(timestamp);
   const now = new Date();
   const sameDay = date.toDateString() === now.toDateString();
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("ar", {
     ...(sameDay
       ? { hour: "numeric", minute: "2-digit" }
       : { month: "short", day: "numeric" }),

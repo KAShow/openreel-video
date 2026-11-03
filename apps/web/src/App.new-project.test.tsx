@@ -144,12 +144,14 @@ describe("new-project links", () => {
     expect(create).not.toHaveBeenCalled(); expect(useProjectStore.getState().hasOpenProject).toBe(false);
   });
 
-  it.each(["", "#/welcome", "#/templates", "#/recent"])("skips the welcome screen and opens a vertical project for '%s'", async (hash) => {
+  it.each(["", "#/welcome", "#/templates", "#/recent"])("opens the requested welcome view without creating a project for '%s'", async (hash) => {
     window.location.hash = hash;
+    const create = vi.spyOn(useProjectStore.getState(), "createNewProject");
     const view = render(<App />);
-    expect(await view.findByText("Editor")).toBeInTheDocument();
-    expect(view.queryByText("Welcome")).toBeNull();
-    expect(useProjectStore.getState().project.settings).toMatchObject({ width: 1080, height: 1920, frameRate: 30 });
+    expect(await view.findByText("Welcome")).toBeInTheDocument();
+    expect(view.queryByText("Editor")).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().hasOpenProject).toBe(false);
   });
 
   it("starts a #/new link without dimensions vertical", async () => {

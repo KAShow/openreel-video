@@ -345,7 +345,7 @@ export const ApiKeysPanel: React.FC = () => {
 
               <Text type="supporting" color="secondary" display="block" className="mt-2 text-[10px]">
                 {stored.createdAt > 0
-                  ? `Added ${new Date(stored.createdAt).toLocaleDateString()} · Updated ${new Date(stored.updatedAt).toLocaleDateString()}`
+                  ? `Added ${new Date(stored.createdAt).toLocaleDateString("ar")} · Updated ${new Date(stored.updatedAt).toLocaleDateString("ar")}`
                   : "Stored securely in the system keychain"}
               </Text>
             </Card>

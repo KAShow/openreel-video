@@ -35,7 +35,7 @@ function formatSavedAt(savedAt: number): string {
   if (diffDays <= 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
-  return date.toLocaleDateString();
+  return date.toLocaleDateString("ar");
 }
 
 export function DesktopStartScreen(): JSX.Element {

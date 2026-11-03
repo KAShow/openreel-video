@@ -1,7 +1,7 @@
 {
-  "name": "Director's Eyes Editor",
-  "short_name": "DE Editor",
-  "description": "Director's Eyes video editor by Hawsh Khalifa, built on OpenReel (MIT)",
+  "name": "محرر عيون المخرج",
+  "short_name": "عيون المخرج",
+  "description": "محرر فيديو عيون المخرج من حوش خليفة، مبني على OpenReel (MIT)",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1C1C1E",

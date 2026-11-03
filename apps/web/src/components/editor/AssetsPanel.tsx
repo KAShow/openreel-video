@@ -120,11 +120,11 @@ export const TEXT_STYLE_PRESETS: ReadonlyArray<{
   text: string;
   style: Partial<TextStyle>;
 }> = [
-  { name: "Heading", text: "Heading", style: { fontSize: 72, fontWeight: 700 } },
-  { name: "Subtitle", text: "Subtitle text", style: { fontSize: 36, fontWeight: 400 } },
+  { name: "Heading", text: "عنوان رئيسي", style: { fontSize: 72, fontWeight: 700 } },
+  { name: "Subtitle", text: "نص العنوان الفرعي", style: { fontSize: 36, fontWeight: 400 } },
   {
     name: "Lower Third",
-    text: "Name Here",
+    text: "اكتب الاسم هنا",
     style: {
       fontSize: 32,
       fontWeight: 600,
@@ -135,7 +135,7 @@ export const TEXT_STYLE_PRESETS: ReadonlyArray<{
   },
   {
     name: "Caption",
-    text: "Caption text here",
+    text: "اكتب نص الترجمة هنا",
     style: {
       fontSize: 24,
       fontWeight: 400,
@@ -148,7 +148,7 @@ export const TEXT_STYLE_PRESETS: ReadonlyArray<{
   },
   {
     name: "Hero",
-    text: "MAKE IT MOVE",
+    text: "اجعلها تتحرك",
     style: {
       fontSize: 112,
       fontWeight: 900,
@@ -159,7 +159,7 @@ export const TEXT_STYLE_PRESETS: ReadonlyArray<{
   },
   {
     name: "Quote",
-    text: "“Tell a better story.”",
+    text: "«احكِ قصة أفضل.»",
     style: {
       fontSize: 54,
       fontWeight: 600,
@@ -172,7 +172,7 @@ export const TEXT_STYLE_PRESETS: ReadonlyArray<{
   },
   {
     name: "Outline",
-    text: "OUTLINE",
+    text: "نص مُحدَّد",
     style: {
       fontSize: 80,
       fontWeight: 900,
@@ -183,7 +183,7 @@ export const TEXT_STYLE_PRESETS: ReadonlyArray<{
   },
   {
     name: "Badge",
-    text: "NEW RELEASE",
+    text: "إصدار جديد",
     style: {
       fontSize: 28,
       fontWeight: 800,
