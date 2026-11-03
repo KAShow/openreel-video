@@ -26,4 +26,28 @@ describe("ToolcraftSliderControl", () => {
 
     expect(onChange).toHaveBeenCalledWith(0.25);
   });
+
+  it("reports a committed value on keyboard step, snapped to the 0.01 step", () => {
+    const onChange = vi.fn();
+    const onCommit = vi.fn();
+
+    render(
+      <ToolcraftSliderControl
+        label="Speed"
+        value={1}
+        onChange={onChange}
+        onCommit={onCommit}
+        min={0.1}
+        max={5}
+        step={0.01}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("slider", { name: "Speed" }), {
+      key: "ArrowRight",
+    });
+
+    expect(onChange).toHaveBeenCalledWith(1.01);
+    expect(onCommit).toHaveBeenCalledWith(1.01);
+  });
 });

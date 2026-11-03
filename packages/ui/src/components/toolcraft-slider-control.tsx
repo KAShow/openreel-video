@@ -8,6 +8,8 @@ export interface ToolcraftSliderControlProps {
   label?: string
   value: number
   onChange: (value: number) => void
+  /** Fires once when a drag is released (and after each keyboard step). */
+  onCommit?: (value: number) => void
   min?: number
   max?: number
   step?: number
@@ -80,6 +82,7 @@ export const ToolcraftSliderControl = React.forwardRef<
       ariaLabel,
       value,
       onChange,
+      onCommit,
       min = 0,
       max = 100,
       step = 1,
@@ -240,6 +243,16 @@ export const ToolcraftSliderControl = React.forwardRef<
               commitValue(nextValue)
             }
           }}
+          onValueCommit={
+            onCommit
+              ? (values) => {
+                  const nextValue = values[0]
+                  if (typeof nextValue === "number") {
+                    onCommit(clamp(snap(nextValue, min, step), min, max))
+                  }
+                }
+              : undefined
+          }
           min={min}
           max={max}
           step={step}
