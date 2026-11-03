@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test("opens a simple personal start page", async ({ page }, testInfo) => {
   await page.goto("/#/welcome");
 
-  await expect(page.getByRole("heading", { name: "ماذا تريد أن تصنع اليوم؟" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "ماذا تريد أن تصنع اليوم؟" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "مشروع جديد", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "المشاريع السابقة", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "إنشاء مشروع طولي" })).toHaveCount(0);

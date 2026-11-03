@@ -183,7 +183,7 @@ export const EditorActionRail: React.FC = () => {
         menuWidth={224}
         items={[
           {
-            label: "Settings & API keys",
+            label: SIMPLE_EDITOR ? "Settings" : "Settings & API keys",
             icon: <Settings size={14} aria-hidden />,
             onClick: () => openSettings(),
           },
@@ -198,7 +198,7 @@ export const EditorActionRail: React.FC = () => {
             ),
             onClick: () => openModal("recorder"),
           }]),
-          { type: "divider" },
+          { type: "divider" as const },
           {
             label: "Editor tour",
             icon: <Play size={14} aria-hidden />,
@@ -207,30 +207,32 @@ export const EditorActionRail: React.FC = () => {
               startTour();
             },
           },
-          {
-            label: "Animation & effects tour",
-            icon: <Sparkles size={14} className="text-accent" aria-hidden />,
-            onClick: () => {
-              localStorage.removeItem(MOGRAPH_TOUR_KEY);
-              startMoGraphTour();
+          ...(SIMPLE_EDITOR ? [] : [
+            {
+              label: "Animation & effects tour",
+              icon: <Sparkles size={14} className="text-accent" aria-hidden />,
+              onClick: () => {
+                localStorage.removeItem(MOGRAPH_TOUR_KEY);
+                startMoGraphTour();
+              },
             },
-          },
-          { type: "divider" },
-          {
-            label: "Help & shortcuts (press ?)",
-            icon: <HelpCircle size={14} aria-hidden />,
-            isDisabled: true,
-          },
-          ...(SIMPLE_EDITOR ? [] : [{
-            label: "Project JSON",
-            icon: <FileCode size={14} aria-hidden />,
-            isDisabled: true,
-          }]),
-          {
-            label: "Cmd+K to search",
-            icon: <Command size={14} aria-hidden />,
-            isDisabled: true,
-          },
+            { type: "divider" as const },
+            {
+              label: "Help & shortcuts (press ?)",
+              icon: <HelpCircle size={14} aria-hidden />,
+              isDisabled: true,
+            },
+            {
+              label: "Project JSON",
+              icon: <FileCode size={14} aria-hidden />,
+              isDisabled: true,
+            },
+            {
+              label: "Cmd+K to search",
+              icon: <Command size={14} aria-hidden />,
+              isDisabled: true,
+            },
+          ]),
         ]}
       />
     </nav>

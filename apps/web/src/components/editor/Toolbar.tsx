@@ -383,10 +383,12 @@ export const Toolbar: React.FC = () => {
   return (
     <header className="h-[60px] flex items-center gap-2 px-2 sm:gap-[18px] sm:px-[18px] bg-bg-1 border-b border-border shrink-0 z-30 relative">
 
-      <div role="group" aria-label="Editing mode" className="flex shrink-0 rounded-lg bg-bg-3 p-1 text-xs">
-        <button type="button" aria-pressed={!aiMode} className={`rounded-md px-3 py-1.5 ${!aiMode ? "bg-bg-1 text-fg" : "text-fg-muted"}`} onClick={() => useUIStore.getState().setPanelVisible("agentChat", false)}>Manual</button>
-        <button type="button" aria-pressed={aiMode} className={`rounded-md px-3 py-1.5 ${aiMode ? "bg-accent-soft text-accent" : "text-fg-muted"}`} onClick={() => useUIStore.getState().setPanelVisible("agentChat", true)}>AI editing</button>
-      </div>
+      {!SIMPLE_EDITOR && (
+        <div role="group" aria-label="Editing mode" className="flex shrink-0 rounded-lg bg-bg-3 p-1 text-xs">
+          <button type="button" aria-pressed={!aiMode} className={`rounded-md px-3 py-1.5 ${!aiMode ? "bg-bg-1 text-fg" : "text-fg-muted"}`} onClick={() => useUIStore.getState().setPanelVisible("agentChat", false)}>Manual</button>
+          <button type="button" aria-pressed={aiMode} className={`rounded-md px-3 py-1.5 ${aiMode ? "bg-accent-soft text-accent" : "text-fg-muted"}`} onClick={() => useUIStore.getState().setPanelVisible("agentChat", true)}>AI editing</button>
+        </div>
+      )}
 
       {/* ─── Center: project name ─────────────────────────────── */}
       <div className="flex flex-1 min-w-0 items-center justify-center gap-1.5">
@@ -447,13 +449,20 @@ export const Toolbar: React.FC = () => {
           <div className="flex items-stretch">
             <button
               type="button"
-              onClick={openExportDialog}
+              onClick={SIMPLE_EDITOR ? () => handleExport("mp4") : openExportDialog}
               disabled={!hasTimelineContent}
-              title={hasTimelineContent ? "Choose export settings" : "Add media or text to the timeline to export"}
-              className="rounded-l-[8px] rounded-r-none bg-accent px-[18px] py-[9px] text-[13px] font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              title={
+                !hasTimelineContent
+                  ? "Add media or text to the timeline to export"
+                  : SIMPLE_EDITOR
+                    ? "Export MP4"
+                    : "Choose export settings"
+              }
+              className={`bg-accent px-[18px] py-[9px] text-[13px] font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed ${SIMPLE_EDITOR ? "rounded-[8px]" : "rounded-l-[8px] rounded-r-none"}`}
             >
               Export
             </button>
+            {!SIMPLE_EDITOR && (
             <DropdownMenu
               isMenuOpen={isExportOpen}
               onOpenChange={setIsExportOpen}
@@ -552,6 +561,7 @@ export const Toolbar: React.FC = () => {
                 {project.settings.frameRate}fps
               </Text>
             </DropdownMenu>
+            )}
           </div>
         )}
       </div>

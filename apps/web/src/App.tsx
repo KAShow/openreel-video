@@ -64,7 +64,7 @@ function App() {
     if (route === "new") {
       hasHandledInitialRoute.current = true;
 
-      let projectName = "New Project";
+      let projectName = "مشروع جديد";
       let width = DEFAULT_PROJECT_SETTINGS.width;
       let height = DEFAULT_PROJECT_SETTINGS.height;
       let frameRate = fps;
@@ -76,7 +76,7 @@ function App() {
           width = preset.width;
           height = preset.height;
           frameRate = params.fps ? fps : (preset.frameRate || fps);
-          projectName = `New ${presetKey.charAt(0).toUpperCase() + presetKey.slice(1).replace(/-/g, " ")} Project`;
+          projectName = "مشروع جديد";
         }
       } else if (parsedDimensions) {
         width = parsedDimensions.width;
@@ -91,11 +91,11 @@ function App() {
 
         const aspectRatio = width / height;
         if (aspectRatio < 1) {
-          projectName = "New Vertical Video";
+          projectName = "فيديو طولي جديد";
         } else if (aspectRatio > 1) {
-          projectName = "New Horizontal Video";
+          projectName = "فيديو عرضي جديد";
         } else {
-          projectName = "New Square Video";
+          projectName = "فيديو مربع جديد";
         }
       }
 
@@ -123,7 +123,7 @@ function App() {
     // Recovery owns the choice until it settles. A bare editor URL still needs
     // a real project for autosave and preview-proxy lifecycle subscriptions.
     if (showWelcome || isSharePage || route === "new" || isChecking || showDialog || isRecovering || hasOpenProject) return;
-    createNewProject("New Project");
+    createNewProject("مشروع جديد");
   }, [showWelcome, isSharePage, route, isChecking, showDialog, isRecovering, hasOpenProject, createNewProject]);
 
   const handleKeyDown = useCallback(

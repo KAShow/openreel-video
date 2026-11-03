@@ -113,7 +113,7 @@ export const HistoryPanel: React.FC = () => {
 
   const formatTime = (timestamp: number): string => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return date.toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" });
   };
 
   const undoCount = actionHistory.getUndoStackSize() + clipUndoStack.length;

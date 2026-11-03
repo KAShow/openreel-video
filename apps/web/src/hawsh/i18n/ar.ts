@@ -3,7 +3,12 @@
  * Not translated on purpose: font names, brand names (YouTube, TikTok, H.264…), emoji names,
  * lowercase search tags, numbers and units shown alone.
  */
+import { AR_ADDITIONAL } from "./ar-additional";
+import { AR_CONTROLS } from "./ar-controls";
+
 export const AR: Record<string, string> = {
+  ...AR_ADDITIONAL,
+  ...AR_CONTROLS,
   // ── Title, welcome screen, tour ─────────────────────────────────────────
   "Director's Eyes Editor — Hawsh Khalifa": "محرر عيون المخرج — حوش خليفة",
   "Director's Eyes Editor": "محرر عيون المخرج",

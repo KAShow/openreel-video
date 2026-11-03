@@ -38,7 +38,7 @@ export const SettingsDialog: React.FC = () => {
         header={
           <DialogHeader
             title="Settings"
-            subtitle="Configure preferences and manage API keys for external services."
+            subtitle="Configure your editor preferences."
             onOpenChange={(open) => !open && closeSettings()}
             startContent={<Settings size={18} className="text-primary" aria-hidden />}
           />

@@ -235,20 +235,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
         )}
       </header>
 
-      <main className="mx-auto flex min-h-[calc(100dvh-5rem)] w-full max-w-md flex-col justify-center px-5 py-10 sm:px-8 sm:py-14">
-        <div className="text-center">
-          <p className="text-sm font-medium text-primary">
-            مرحبًا{displayName ? `، ${displayName}` : " بك"}
-          </p>
-          <h1 className="mt-3 text-3xl font-semibold leading-tight text-text-primary sm:text-4xl">
-            ماذا تريد أن تصنع اليوم؟
-          </h1>
-          <p className="mt-3 text-sm leading-6 text-text-secondary">
-            ابدأ من جديد أو تابع مشروعًا سابقًا.
-          </p>
-        </div>
-
-        <div className="mt-10 space-y-3">
+      <main aria-label="البدء" className="mx-auto flex min-h-[calc(100dvh-5rem)] w-full max-w-md flex-col justify-center px-5 py-10 sm:px-8 sm:py-14">
+        <div className="space-y-3">
           <button
             type="button"
             onClick={handleCreateProject}

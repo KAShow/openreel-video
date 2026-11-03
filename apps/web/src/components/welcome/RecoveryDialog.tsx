@@ -32,7 +32,7 @@ function formatTimeAgo(timestamp: number): string {
 }
 
 function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleString(undefined, {
+  return new Date(timestamp).toLocaleString("ar", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
