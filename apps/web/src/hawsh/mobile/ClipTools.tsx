@@ -15,6 +15,10 @@ import {
   canCutAt, cutSilences, FAILED, duplicate, findSilences, NOT_UNDER_PLAYHEAD, remove, selectedTarget, setSpeed, setVolume,
   silenceTotal, splitAt, SPEEDS, trimAt, type Target,
 } from "./clip-tools";
+import type { Clip } from "@openreel/core";
+import {
+  durationAtSpeed, formatSeconds, formatSpeed, roundSpeed, SPEED_MIN, SPEED_SLIDER_MAX, SPEED_STEP,
+} from "../../components/editor/inspector/speed-utils";
 import { editText } from "./add-tools";
 import { TextEditor } from "./AddSheets";
 
@@ -118,12 +122,7 @@ export const ClipTools: React.FC = () => {
               </div>
             )}
             {sheet === "speed" && target.kind === "clip" && (
-              <div className="grid grid-cols-5 gap-2" dir="ltr">
-                {SPEEDS.map((s) => (
-                  <button key={s} type="button" disabled={busy} onClick={() => void run(() => setSpeed(target.clip, s))}
-                    className={`${btn} ${Math.abs((target.clip.speed ?? 1) - s) < 0.001 ? "border-primary text-primary" : ""}`}>{s}×</button>
-                ))}
-              </div>
+              <SpeedControl key={target.id} clip={target.clip} busy={busy} onApply={(s) => void run(() => setSpeed(target.clip, s))} />
             )}
             {sheet === "volume" && target.kind === "clip" && <VolumeControl key={target.id} clipId={target.id} volume={target.clip.volume ?? 1} />}
             {sheet === "silence" && target.kind === "clip" && <SilenceControl key={target.id} clipId={target.id} onDone={() => setSheet(null)} />}
@@ -131,6 +130,49 @@ export const ClipTools: React.FC = () => {
         </div>
       )}
     </>
+  );
+};
+
+/**
+ * Speed 0.1–5× in 0.01 steps; committed when the finger lifts so a drag is one undo step. The − / +
+ * buttons nudge by 0.01 for exact values, and the presets stay for the common jumps.
+ */
+export const SpeedControl: React.FC<{ clip: Clip; busy: boolean; onApply: (speed: number) => void }> = ({ clip, busy, onApply }) => {
+  const speed = roundSpeed(clip.speed ?? 1);
+  const [value, setValue] = useState(speed);
+  useEffect(() => setValue(speed), [speed]);
+  const commit = (v: number) => {
+    const next = roundSpeed(Math.min(SPEED_SLIDER_MAX, Math.max(SPEED_MIN, v)));
+    setValue(next);
+    if (Math.abs(next - speed) > 0.001) onApply(next);
+  };
+  const source = clip.outPoint - clip.inPoint;
+  return (
+    <div className="space-y-3" dir="ltr">
+      <div className="flex items-center gap-2">
+        <button type="button" aria-label="أبطأ 0.01" disabled={busy || value <= SPEED_MIN} className={`${btn} w-12 shrink-0`}
+          onClick={() => commit(value - SPEED_STEP)}>−</button>
+        <input type="range" min={SPEED_MIN} max={SPEED_SLIDER_MAX} step={SPEED_STEP} value={Math.min(value, SPEED_SLIDER_MAX)}
+          aria-label="السرعة" className="flex-1 accent-primary" disabled={busy}
+          onChange={(e) => setValue(Number(e.target.value))}
+          onPointerUp={(e) => commit(Number((e.target as HTMLInputElement).value))}
+          onKeyUp={(e) => commit(Number((e.target as HTMLInputElement).value))} />
+        <button type="button" aria-label="أسرع 0.01" disabled={busy || value >= SPEED_SLIDER_MAX} className={`${btn} w-12 shrink-0`}
+          onClick={() => commit(value + SPEED_STEP)}>+</button>
+      </div>
+      <p className="text-center font-mono text-lg font-bold tabular-nums" aria-live="polite">{formatSpeed(value)}</p>
+      {source > 0 && value !== 1 && (
+        <p className="text-center text-xs text-fg-muted" dir="rtl">
+          مدة اللقطة: {formatSeconds(source)} ← {formatSeconds(durationAtSpeed(clip.inPoint, clip.outPoint, value))}
+        </p>
+      )}
+      <div className="grid grid-cols-5 gap-2">
+        {SPEEDS.map((s) => (
+          <button key={s} type="button" disabled={busy} onClick={() => commit(s)}
+            className={`${btn} px-0 ${Math.abs(value - s) < 0.001 ? "border-primary text-primary" : ""}`}>{s}×</button>
+        ))}
+      </div>
+    </div>
   );
 };
 
