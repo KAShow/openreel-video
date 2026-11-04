@@ -370,6 +370,8 @@ export const AR_ADDITIONAL: Record<string, string> = {
   "Randomness": "العشوائية",
   "Range: 0.1× (slowest) to 20× (fastest)": "النطاق: 0.1× (الأبطأ) إلى 20× (الأسرع)",
   "Clip length:": "مدة المقطع:",
+  "Cut silences": "قص السكتات",
+  "Set volume": "ضبط الصوت",
   "Reset speed": "إعادة السرعة إلى 1×",
   "Enter a number such as 1.25": "أدخل رقمًا مثل 1.25",
   "Value adjusted to the allowed range": "عُدّلت القيمة إلى النطاق المسموح",

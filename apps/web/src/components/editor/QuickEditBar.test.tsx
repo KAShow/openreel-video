@@ -132,6 +132,21 @@ describe("QuickEditBar", () => {
     expect(useUIStore.getState().activeModal).toBe("export");
   });
 
+  it("jumps to the speed, volume and silence sections for the selected clip", () => {
+    show();
+    for (const [label, sectionId] of [["Speed", "speed"], ["Set volume", "clip-audio"], ["Cut silences", "auto-cut-silence"]]) {
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      expect(useInspectorNavigationStore.getState().request).toMatchObject({ sectionId, clipId });
+    }
+  });
+
+  it("offers volume but not speed on audio-only clips", () => {
+    seed("audio");
+    show();
+    expect(screen.queryByRole("button", { name: "Speed" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Set volume" })).toBeInTheDocument();
+  });
+
   it("keeps unavailable media from starting captions or cleanup", () => {
     const project = useProjectStore.getState().project;
     useProjectStore.setState({ project: { ...project, mediaLibrary: {

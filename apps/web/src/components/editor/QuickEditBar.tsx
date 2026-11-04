@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Captions, Download, Scissors, Volume2, Proportions, Loader2 } from "@/icons/lucide-compat";
+import { AudioWaveform, Captions, Download, Gauge, Scissors, Volume2, Proportions, Loader2 } from "@/icons/lucide-compat";
 import { ToolcraftButton as Button } from "@openreel/ui";
 import { getMediaItemCapabilities } from "@openreel/core";
 import { useProjectStore } from "../../stores/project-store";
@@ -89,6 +89,15 @@ export const QuickEditBar: React.FC<QuickEditBarProps> = ({
         <Button label="Trim end" title="Remove the part after the playhead" variant="secondary"
           onClick={() => void runEdit("trimEnd")} isDisabled={disabled || !canEditHere}
           className="min-h-11 w-full justify-center text-xs" />
+        {media?.type === "video" && <Button label="Speed" icon={<Gauge size={14} aria-hidden />} variant="secondary"
+          onClick={() => openSection("speed")} isDisabled={disabled}
+          className="min-h-11 w-full justify-center text-xs" />}
+        {capabilities.audio && <Button label="Set volume" icon={<Volume2 size={14} aria-hidden />} variant="secondary"
+          onClick={() => openSection("clip-audio")} isDisabled={disabled}
+          className="min-h-11 w-full justify-center text-xs" />}
+        {capabilities.audio && <Button label="Cut silences" icon={<AudioWaveform size={14} aria-hidden />} variant="secondary"
+          onClick={() => openSection("auto-cut-silence")} isDisabled={disabled || unavailableSource}
+          className="min-h-11 w-full justify-center text-xs" />}
         {capabilities.audio && <Button label="Add captions" icon={<Captions size={14} aria-hidden />} variant="secondary"
           onClick={() => openSection("auto-captions")} isDisabled={disabled || unavailableSource}
           className="min-h-11 w-full justify-center text-xs" />}
