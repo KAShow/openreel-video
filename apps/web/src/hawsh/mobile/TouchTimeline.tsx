@@ -4,6 +4,8 @@
  * empty space to clear. Reads the same stores as the desktop timeline; edits come in stage 3.
  * A selected clip gets white handles on both edges: drag one inward to trim that side (one trim on
  * release, through the same trimAt as the trim sheet).
+ * Press and hold a clip, then drag, to move it earlier or later (reorder.ts): the clips on its row make
+ * room as it goes, a plain swipe still scrolls, and an edge of the screen scrolls the timeline along.
  * Learning from CapCut, stage 2: video clips show a strip of frames, the white "+" sits at the end of
  * the main track, empty "+ add text" / "+ add audio" lanes invite the next step, the ruler reads 00:00,
  * and a clip that is not at 1× shows its speed.
@@ -17,12 +19,22 @@ import { frameAt, timelineRows, type RowClip, type RowKind } from "./rows";
 import { edgeCutTime, selectedTarget, trimAt } from "./clip-tools";
 import { AddMediaButton } from "./AddSheets";
 import { importFiles, mainTrack } from "./add-tools";
+import { moveOnTrack, reorderPlan, type Slot } from "../reorder";
+import { toast } from "../../stores/notification-store";
 
 type Side = "start" | "end";
 interface Drag { id: string; side: Side; x0: number; dx: number }
 /** Trim handles: a slim white bar on the clip edge, inside a wider invisible touch area. */
 const HANDLE = 26;
 const HANDLE_BAR = 10;
+
+interface Moving { id: string; rowKey: string; selection: RowClip["selection"]; origin: number; free: boolean; x0: number; scroll0: number; dx: number }
+const LONG_PRESS_MS = 350;
+/** A finger that travels this far before the long press fires is a scroll. */
+const PRESS_SLOP = 8;
+const EDGE_ZONE = 48;
+const EDGE_SPEED = 6;
+const rowKey = (r: { trackId: string; kind: RowKind }) => `${r.trackId}-${r.kind}`;
 
 export const PIXELS_PER_SECOND = 56;
 const ROW_HEIGHT: Record<RowKind, number> = { video: 56, text: 30, audio: 26 };
@@ -106,11 +118,114 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
     seekTo(Math.min(duration, Math.max(0, el.scrollLeft / PIXELS_PER_SECOND)));
   };
 
+  // Long press, then drag: move the clip earlier or later.
+  const pressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressAt = useRef({ x: 0, y: 0 });
+  const movingRef = useRef<Moving | null>(null);
+  const [moving, setMoving] = useState<Moving | null>(null);
+  const fingerX = useRef(0);
+  const swallowClick = useRef(false);
+  const mainId = mainTrack(project)?.id;
+
+  const clearPress = () => {
+    if (pressRef.current) clearTimeout(pressRef.current);
+    pressRef.current = null;
+  };
+  const syncMove = () => {
+    const m = movingRef.current;
+    const el = scroller.current;
+    if (!m || !el) return;
+    movingRef.current = { ...m, dx: fingerX.current - m.x0 + el.scrollLeft - m.scroll0 };
+    setMoving(movingRef.current);
+  };
+  const pressClip = (e: React.PointerEvent<HTMLElement>, c: RowClip, row: { trackId: string; kind: RowKind }) => {
+    if (e.button !== 0) return;
+    const el = e.currentTarget;
+    const { pointerId, clientX, clientY } = e;
+    pressAt.current = { x: clientX, y: clientY };
+    fingerX.current = clientX;
+    clearPress();
+    pressRef.current = setTimeout(() => {
+      pressRef.current = null;
+      if (playing) pause();
+      try { el.setPointerCapture(pointerId); } catch { /* the finger already lifted */ }
+      select({ type: c.selection, id: c.id, trackId: row.trackId });
+      swallowClick.current = true;
+      navigator.vibrate?.(15);
+      movingRef.current = {
+        id: c.id, rowKey: rowKey(row), selection: c.selection, origin: c.start,
+        free: !(row.kind === "video" && row.trackId === mainId),
+        x0: fingerX.current, scroll0: scroller.current?.scrollLeft ?? 0, dx: 0,
+      };
+      setMoving(movingRef.current);
+    }, LONG_PRESS_MS);
+  };
+  const moveFinger = (e: React.PointerEvent) => {
+    fingerX.current = e.clientX;
+    if (pressRef.current && Math.hypot(e.clientX - pressAt.current.x, e.clientY - pressAt.current.y) > PRESS_SLOP) clearPress();
+    syncMove();
+  };
+  const dropStart = (m: Moving) => Math.max(0, m.origin + m.dx / PIXELS_PER_SECOND);
+  const slotsOf = (key: string): Slot[] => (rows.find((r) => rowKey(r) === key)?.clips ?? []).map((c) => ({ id: c.id, start: c.start, duration: c.duration }));
+  const liftFinger = () => {
+    clearPress();
+    const m = movingRef.current;
+    movingRef.current = null;
+    setMoving(null);
+    if (!m) return;
+    const drop = dropStart(m);
+    if (m.selection === "text-clip") {
+      if (Math.abs(drop - m.origin) > 0.001) useProjectStore.getState().updateOverlayClipTiming(m.id, { startTime: drop });
+      return;
+    }
+    void moveOnTrack(slotsOf(m.rowKey), m.id, drop, m.free).then((ok) => { if (!ok) toast.error("تعذّر نقل اللقطة"); });
+  };
+  const cancelFinger = () => {
+    clearPress();
+    movingRef.current = null;
+    setMoving(null);
+  };
+  const isMoving = moving !== null;
+
+  // Once a clip is lifted the finger drags it, not the timeline.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const stop = (ev: TouchEvent) => { if (movingRef.current) ev.preventDefault(); };
+    el.addEventListener("touchmove", stop, { passive: false });
+    return () => el.removeEventListener("touchmove", stop);
+  }, []);
+
+  // A finger held at a screen edge scrolls the timeline, so a clip can travel past what is visible.
+  useEffect(() => {
+    if (!isMoving) return;
+    let frame = requestAnimationFrame(function tick() {
+      const el = scroller.current;
+      if (el) {
+        const box = el.getBoundingClientRect();
+        const step = fingerX.current < box.left + EDGE_ZONE ? -EDGE_SPEED : fingerX.current > box.right - EDGE_ZONE ? EDGE_SPEED : 0;
+        if (step) { el.scrollLeft += step; syncMove(); }
+      }
+      frame = requestAnimationFrame(tick);
+    });
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMoving]);
+
+  const plan = useMemo(() => {
+    if (!moving || moving.selection === "text-clip") return new Map<string, number>();
+    return new Map(reorderPlan(slotsOf(moving.rowKey), moving.id, dropStart(moving), moving.free).map((x) => [x.id, x.start]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moving, rows]);
+
   // Edge-handle trim. The ref keeps pointer handlers in step between renders.
   const dragRef = useRef<Drag | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const cutFor = (c: RowClip, d: Drag) => edgeCutTime(c.start, c.duration, d.side, d.dx / PIXELS_PER_SECOND);
   const shown = (c: RowClip) => {
+    if (moving?.id === c.id) return { start: dropStart(moving), duration: c.duration };
+    const planned = moving ? plan.get(c.id) : undefined;
+    if (planned !== undefined) return { start: planned, duration: c.duration };
     const cut = drag?.id === c.id ? cutFor(c, drag) : null;
     if (cut === null || !drag) return { start: c.start, duration: c.duration };
     return drag.side === "start" ? { start: cut, duration: c.start + c.duration - cut } : { start: c.start, duration: cut - c.start };
@@ -142,7 +257,6 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
   const ticks = Array.from({ length: Math.floor(duration) + 1 }, (_, i) => i);
 
   // The white "+" follows the end of the main track (where new clips land), clear of a trim handle.
-  const mainId = mainTrack(project)?.id;
   const mainRow = rows.find((r) => r.kind === "video" && r.trackId === mainId) ?? rows.find((r) => r.kind === "video");
   const mainEnd = mainRow ? Math.max(...mainRow.clips.map((c) => { const s = shown(c); return s.start + s.duration; })) : 0;
   const addStyle = (rowHeight: number): React.CSSProperties => ({
@@ -173,10 +287,17 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
                   const w = Math.max(8, s.duration * PIXELS_PER_SECOND - 2);
                   return (
                     <React.Fragment key={c.id}>
-                      <button type="button" title={c.label}
-                        onClick={(e) => { e.stopPropagation(); select({ type: c.selection, id: c.id, trackId: row.trackId }); }}
-                        className={`absolute top-0 h-full overflow-hidden rounded-md border-2 text-start ${isSelected(c.id) ? "border-white" : "border-transparent"} ${
-                          row.kind === "video" ? "bg-bg-3" : row.kind === "text" ? "bg-amber-500/80" : "bg-teal-500/70"}`}
+                      <button type="button" title={c.label} data-testid="timeline-clip"
+                        onPointerDown={(e) => pressClip(e, c, row)} onPointerMove={moveFinger}
+                        onPointerUp={liftFinger} onPointerCancel={cancelFinger} onContextMenu={(e) => e.preventDefault()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (swallowClick.current) { swallowClick.current = false; return; }
+                          select({ type: c.selection, id: c.id, trackId: row.trackId });
+                        }}
+                        className={`absolute top-0 h-full overflow-hidden rounded-md border-2 text-start [-webkit-touch-callout:none] ${isSelected(c.id) ? "border-white" : "border-transparent"} ${
+                          row.kind === "video" ? "bg-bg-3" : row.kind === "text" ? "bg-amber-500/80" : "bg-teal-500/70"} ${
+                          moving?.id === c.id ? "z-20 opacity-90 shadow-xl ring-2 ring-white" : moving ? "transition-[left] duration-150" : ""}`}
                         style={{ left, width: w }}>
                         {row.kind === "video" && <Filmstrip clip={c} shownStart={s.start} width={w} />}
                         {row.kind === "video" && Math.abs(c.speed - 1) > 0.001 && (
@@ -191,7 +312,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
                           </span>
                         )}
                       </button>
-                      {isSelected(c.id) && selected.length === 1 && (["start", "end"] as const).map((side) => (
+                      {!moving && isSelected(c.id) && selected.length === 1 && (["start", "end"] as const).map((side) => (
                         <button key={side} type="button" aria-label={side === "start" ? "اسحب لقص البداية" : "اسحب لقص النهاية"}
                           data-testid={`trim-handle-${side}`}
                           onPointerDown={(e) => startDrag(e, c.id, side)} onPointerMove={moveDrag}

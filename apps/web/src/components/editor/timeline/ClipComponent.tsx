@@ -21,6 +21,7 @@ import {
 } from "../panels/EffectsTransitionsPanel";
 import { parseEditorEffectDropPayload } from "./effect-drop";
 import { getVisibleRepeatRange } from "./visible-repeat-range";
+import { dropBrokenTransitions, holdDragHistory, releaseDragHistory, reorderOnDrop } from "../../../hawsh/reorder";
 
 interface ClipComponentProps {
   clip: Clip;
@@ -442,6 +443,12 @@ export const ClipComponent: React.FC<ClipComponentProps> = ({
     };
   }, [isPendingDrag, clip.id, onSelect, touchGesture.pointerId]);
 
+  // Hawsh Khalifa build: the effect below re-runs during a drag, which closed its history group midway
+  // and split one drag into several undo steps. The gesture holds a group of its own (see reorder.ts).
+  useEffect(() => {
+    if (isDragging) holdDragHistory();
+  }, [isDragging]);
+
   useEffect(() => {
     if (!isDragging) return;
 
@@ -589,7 +596,13 @@ export const ClipComponent: React.FC<ClipComponentProps> = ({
       pendingCommit?.();
 
       const { time, targetTrackId } = pendingDropRef.current;
-      await onMoveClip(clip.id, time, targetTrackId ?? track.id);
+      // Hawsh Khalifa build: over other clips on its own track, a clip takes a place among them.
+      const reordered = !targetTrackId && multiDragSnapshotRef.current.length === 0
+        && await reorderOnDrop(clip.id, dragStartTimeRef.current, time);
+      if (!reordered) {
+        await onMoveClip(clip.id, time, targetTrackId ?? track.id);
+        await dropBrokenTransitions([clip.id, ...multiDragSnapshotRef.current.map((snap) => snap.clipId)]);
+      }
 
       setIsDragging(false);
       setDragYOffset(0);
@@ -597,6 +610,7 @@ export const ClipComponent: React.FC<ClipComponentProps> = ({
       onSnapIndicator(null);
       multiDragSnapshotRef.current = [];
       closeGroup();
+      releaseDragHistory();
     };
 
     const cancelDrag = () => {
@@ -610,6 +624,7 @@ export const ClipComponent: React.FC<ClipComponentProps> = ({
       onSnapIndicator(null);
       multiDragSnapshotRef.current = [];
       closeGroup();
+      releaseDragHistory();
     };
     const stopListening = listenTimelineGesture(touchGesture.pointerId, handleMouseMove, handleMouseUp, cancelDrag);
 
