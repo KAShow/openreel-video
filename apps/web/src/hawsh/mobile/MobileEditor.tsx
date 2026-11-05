@@ -6,11 +6,12 @@
  * stage 3). Stage 4 adds the text sheet, captions on the clip under the playhead and the "+" library
  * button. Stage 5: "Export" opens the phone export sheet (PhoneExport) instead of the desktop dialog.
  * Learning from CapCut, stage 1: always dark, line icons, and the play / undo row under the preview
- * instead of over the video.
+ * instead of over the video. The expand button shows the preview on the whole screen: the element goes
+ * full screen where the browser allows it, and on iPhone (which does not) it covers the page.
  */
-import React, { Suspense, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import {
-  ArrowLeftRight, Bot, Captions, Ellipsis, Music, Pause, Play, Redo2, Scissors, Sparkles, Type, Undo2, X,
+  ArrowLeftRight, Bot, Captions, Ellipsis, Maximize, Music, Pause, Play, Redo2, Scissors, Sparkles, Type, Undo2, X,
   type LucideIcon,
 } from "lucide-react";
 import { useProjectStore } from "../../stores/project-store";
@@ -60,6 +61,27 @@ export const MobileEditor: React.FC = () => {
   const [sheet, setSheet] = useState<SheetId | null>(null);
   const [exporting, setExporting] = useState(false);
   const current = TOOLS.find((t) => t.id === sheet);
+  const [fullScreen, setFullScreen] = useState(false);
+  const previewBox = useRef<HTMLElement>(null);
+  const seekTo = useTimelineStore((s) => s.seekTo);
+  const pause = useTimelineStore((s) => s.pause);
+  const clearSelection = useUIStore((s) => s.clearSelection);
+
+  const enterFullScreen = () => {
+    clearSelection();
+    setFullScreen(true);
+    previewBox.current?.requestFullscreen?.().catch(() => undefined);
+  };
+  const leaveFullScreen = () => {
+    setFullScreen(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  };
+  // The Android back button and Esc leave the browser's full screen without going through our button.
+  useEffect(() => {
+    const onChange = () => { if (!document.fullscreenElement) setFullScreen(false); };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
 
   return (
     <div className="hawsh-mobile dark flex h-full w-full flex-col overflow-hidden bg-black text-fg" data-testid="hawsh-mobile-editor">
@@ -72,15 +94,40 @@ export const MobileEditor: React.FC = () => {
         <button type="button" onClick={() => setExporting(true)} className="h-9 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground">تصدير</button>
       </header>
 
-      <section className="relative min-h-0 shrink-0 basis-[44%] bg-black" aria-label="المعاينة">
-        <Preview hideControls />
+      <section ref={previewBox} aria-label="المعاينة" data-testid="phone-preview"
+        className={fullScreen ? "fixed inset-0 z-[95] bg-black" : "relative min-h-0 shrink-0 basis-[44%] bg-black"}>
+        <div className={`h-full w-full ${fullScreen ? "pointer-events-none pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)]" : ""}`}>
+          <Preview hideControls />
+        </div>
+        {fullScreen && (
+          <>
+            <button type="button" aria-label="إغلاق الشاشة الكاملة" onClick={leaveFullScreen}
+              className="absolute end-3 top-[calc(0.75rem+env(safe-area-inset-top))] grid h-10 w-10 place-items-center rounded-full bg-black/60 text-white">
+              <X size={22} />
+            </button>
+            <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-black px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-white" dir="ltr" data-no-translate="">
+              <button type="button" aria-label={playing ? "إيقاف" : "تشغيل"} onClick={togglePlayback} className="grid h-10 w-10 shrink-0 place-items-center rounded-full active:bg-white/10">
+                {playing ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
+              </button>
+              <input type="range" min={0} max={Math.max(duration, 0.01)} step={0.01} value={Math.min(playhead, duration)} aria-label="موضع التشغيل"
+                onPointerDown={() => { if (playing) pause(); }} onChange={(e) => seekTo(Number(e.target.value))}
+                className="min-w-0 flex-1 accent-primary" />
+              <span className="shrink-0 font-mono text-xs tabular-nums">{fmt(playhead)}<span className="text-fg-muted"> / {fmt(duration)}</span></span>
+            </div>
+          </>
+        )}
       </section>
       <div className="flex h-11 shrink-0 items-center justify-between bg-black px-4 text-white" dir="ltr">
-        <span className="w-24 font-mono text-xs tabular-nums"><span>{fmt(playhead)}</span><span className="text-fg-muted"> / {fmt(duration)}</span></span>
+        <span className="w-32 font-mono text-xs tabular-nums"><span>{fmt(playhead)}</span><span className="text-fg-muted"> / {fmt(duration)}</span></span>
         <button type="button" aria-label={playing ? "إيقاف" : "تشغيل"} onClick={togglePlayback} className="grid h-10 w-10 place-items-center rounded-full active:bg-white/10">
           {playing ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
         </button>
-        <UndoRedo />
+        <div className="flex w-32 items-center justify-end gap-1">
+          <UndoRedo />
+          <button type="button" aria-label="شاشة كاملة" onClick={enterFullScreen} className="grid h-9 w-9 place-items-center rounded-full active:bg-white/10">
+            <Maximize size={20} />
+          </button>
+        </div>
       </div>
 
       <section className="relative min-h-0 flex-1 overflow-hidden border-t border-white/10 bg-bg" aria-label="الخط الزمني">
@@ -138,7 +185,7 @@ const UndoRedo: React.FC = () => {
   const { undo, redo, canUndo, canRedo } = useProjectStore.getState();
   const btn = "grid h-9 w-9 place-items-center rounded-full active:bg-white/10 disabled:opacity-30";
   return (
-    <div className="flex w-24 justify-end gap-1" data-testid="undo-redo">
+    <div className="flex justify-end gap-1" data-testid="undo-redo">
       <button type="button" aria-label="تراجع" className={btn} disabled={!canUndo()} onClick={() => void undo()}><Undo2 size={22} strokeWidth={1.6} /></button>
       <button type="button" aria-label="إعادة" className={btn} disabled={!canRedo()} onClick={() => void redo()}><Redo2 size={22} strokeWidth={1.6} /></button>
     </div>
