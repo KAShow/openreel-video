@@ -16,6 +16,7 @@ export function useProjectRecovery() {
   });
 
   const recoverFromAutoSave = useProjectStore((s) => s.recoverFromAutoSave);
+  const hasOpenProject = useProjectStore((s) => s.hasOpenProject);
 
   useEffect(() => {
     const checkForRecovery = async () => {
@@ -72,7 +73,10 @@ export function useProjectRecovery() {
   return {
     isChecking: state.isChecking,
     availableSaves: state.availableSaves,
-    showDialog: state.showDialog,
+    // Recovery only offers a choice while nothing is open. Derived rather than
+    // dismissed so a startup check finishing after the user opened a project
+    // cannot bring the dialog back.
+    showDialog: state.showDialog && !hasOpenProject,
     recover,
     dismiss,
     clearAll,
