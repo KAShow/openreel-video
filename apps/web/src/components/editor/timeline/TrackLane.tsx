@@ -22,6 +22,18 @@ import { useTimelineStore } from "../../../stores/timeline-store";
 import { useUIStore } from "../../../stores/ui-store";
 import { useProjectStore } from "../../../stores/project-store";
 import { toast } from "../../../stores/notification-store";
+import { useDropPreview } from "../../../hawsh/reorder";
+
+/** Hawsh Khalifa build: the slot a dragged clip would land in, shown before the drop. */
+const DropSlot: React.FC<{ trackId: string; pixelsPerSecond: number }> = ({ trackId, pixelsPerSecond }) => {
+  const slot = useDropPreview((s) => (s.trackId === trackId ? s.slot : null));
+  if (!slot) return null;
+  return (
+    <div data-testid="drop-slot" aria-hidden
+      className="pointer-events-none absolute left-0 top-[7px] z-[60] h-12 rounded-lg border-2 border-dashed border-primary bg-primary/30 transition-transform duration-150"
+      style={{ transform: `translateX(${slot.start * pixelsPerSecond}px)`, width: slot.duration * pixelsPerSecond }} />
+  );
+};
 
 type GraphicClipUnion = ShapeClip | SVGClip | StickerClip;
 
@@ -336,6 +348,7 @@ export const TrackLane: React.FC<TrackLaneProps> = React.memo(function TrackLane
               onTrimClip={onTrimClip}
             />
           ))}
+        <DropSlot trackId={track.id} pixelsPerSecond={pixelsPerSecond} />
         {textClips.map((textClip) => (
           <TextClipComponent
             key={textClip.id}

@@ -21,7 +21,7 @@ import {
 } from "../panels/EffectsTransitionsPanel";
 import { parseEditorEffectDropPayload } from "./effect-drop";
 import { getVisibleRepeatRange } from "./visible-repeat-range";
-import { dropBrokenTransitions, holdDragHistory, releaseDragHistory, reorderOnDrop } from "../../../hawsh/reorder";
+import { clearDropPreview, dropBrokenTransitions, holdDragHistory, releaseDragHistory, reorderOnDrop, showDropPreview, useDropPreview } from "../../../hawsh/reorder";
 
 interface ClipComponentProps {
   clip: Clip;
@@ -140,7 +140,9 @@ export const ClipComponent: React.FC<ClipComponentProps> = ({
     "effect" | "transition-left" | "transition-right" | null
   >(null);
 
-  const left = clip.startTime * pixelsPerSecond;
+  // Hawsh Khalifa build: while another clip is dragged over this one, show where this one would go.
+  const previewStart = useDropPreview((s) => s.starts[clip.id]);
+  const left = (previewStart ?? clip.startTime) * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
 
   const clipMediaType = track.type === "audio" ? "audio" : mediaItem?.type ?? track.type;
@@ -543,6 +545,8 @@ export const ClipComponent: React.FC<ClipComponentProps> = ({
       setIsInvalidDrop(hoveredTrackIsLocked);
 
       pendingDropRef.current = { time: snapResult.time, targetTrackId };
+      if (targetTrackId || multiDragSnapshotRef.current.length > 0) clearDropPreview();
+      else showDropPreview(clip.id, track.id, dragStartTimeRef.current, snapResult.time);
 
       // Coalesce store commits to one per animation frame. A fast mouse
       // fires many mousemove events between frames; dispatching moveClip on
@@ -611,6 +615,7 @@ export const ClipComponent: React.FC<ClipComponentProps> = ({
       multiDragSnapshotRef.current = [];
       closeGroup();
       releaseDragHistory();
+      clearDropPreview();
     };
 
     const cancelDrag = () => {
@@ -625,6 +630,7 @@ export const ClipComponent: React.FC<ClipComponentProps> = ({
       multiDragSnapshotRef.current = [];
       closeGroup();
       releaseDragHistory();
+      clearDropPreview();
     };
     const stopListening = listenTimelineGesture(touchGesture.pointerId, handleMouseMove, handleMouseUp, cancelDrag);
 
@@ -830,7 +836,7 @@ export const ClipComponent: React.FC<ClipComponentProps> = ({
               : `translateX(${left}px)`,
             width: `${width}px`,
             willChange: isInteracting ? 'transform, width' : 'auto',
-            transition: isInteracting ? 'none' : 'opacity 150ms, box-shadow 150ms',
+            transition: isInteracting ? 'none' : previewStart !== undefined ? 'transform 150ms' : 'opacity 150ms, box-shadow 150ms',
             pointerEvents: isDragging ? 'none' : 'auto',
           }}
         >

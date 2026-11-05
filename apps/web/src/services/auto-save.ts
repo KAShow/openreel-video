@@ -412,6 +412,13 @@ export class AutoSaveManager {
     }
   }
 
+  /** Reads a saved project without restoring it (thumbnails of the saved-projects page). */
+  async readSave(saveId: string): Promise<Project | null> {
+    if (!this.db) await this.initialize();
+    const record = await this.getRecord(saveId);
+    return record ? (JSON.parse(record.data) as Project) : null;
+  }
+
   async recover(saveId: string): Promise<Project | null> {
     if (!this.db) {
       await this.initialize();

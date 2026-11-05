@@ -5,7 +5,8 @@
  * A selected clip gets white handles on both edges: drag one inward to trim that side (one trim on
  * release, through the same trimAt as the trim sheet).
  * Press and hold a clip, then drag, to move it earlier or later (reorder.ts): the clips on its row make
- * room as it goes, a plain swipe still scrolls, and an edge of the screen scrolls the timeline along.
+ * room as it goes, a dashed slot shows where it would land, a plain swipe still scrolls, and an edge of
+ * the screen scrolls the timeline along.
  * Learning from CapCut, stage 2: video clips show a strip of frames, the white "+" sits at the end of
  * the main track, empty "+ add text" / "+ add audio" lanes invite the next step, the ruler reads 00:00,
  * and a clip that is not at 1× shows its speed.
@@ -29,7 +30,7 @@ const HANDLE = 26;
 const HANDLE_BAR = 10;
 
 interface Moving { id: string; rowKey: string; selection: RowClip["selection"]; origin: number; free: boolean; x0: number; scroll0: number; dx: number }
-const LONG_PRESS_MS = 350;
+const LONG_PRESS_MS = 180;
 /** A finger that travels this far before the long press fires is a scroll. */
 const PRESS_SLOP = 8;
 const EDGE_ZONE = 48;
@@ -297,7 +298,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
                         }}
                         className={`absolute top-0 h-full overflow-hidden rounded-md border-2 text-start [-webkit-touch-callout:none] ${isSelected(c.id) ? "border-white" : "border-transparent"} ${
                           row.kind === "video" ? "bg-bg-3" : row.kind === "text" ? "bg-amber-500/80" : "bg-teal-500/70"} ${
-                          moving?.id === c.id ? "z-20 opacity-90 shadow-xl ring-2 ring-white" : moving ? "transition-[left] duration-150" : ""}`}
+                          moving?.id === c.id ? "z-20 -translate-y-1.5 opacity-60 shadow-xl ring-2 ring-white" : moving ? "transition-[left] duration-150" : ""}`}
                         style={{ left, width: w }}>
                         {row.kind === "video" && <Filmstrip clip={c} shownStart={s.start} width={w} />}
                         {row.kind === "video" && Math.abs(c.speed - 1) > 0.001 && (
@@ -328,6 +329,16 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
                     </React.Fragment>
                   );
                 })}
+                {moving?.rowKey === rowKey(row) && plan.has(moving.id) && (() => {
+                  const dragged = row.clips.find((c) => c.id === moving.id);
+                  const slot = plan.get(moving.id);
+                  if (!dragged || slot === undefined) return null;
+                  return (
+                    <span data-testid="drop-slot" aria-hidden
+                      className="pointer-events-none absolute top-0 z-30 h-full rounded-md border-2 border-dashed border-primary bg-primary/30 transition-[left] duration-150"
+                      style={{ left: half + slot * PIXELS_PER_SECOND, width: Math.max(8, dragged.duration * PIXELS_PER_SECOND - 2) }} />
+                  );
+                })()}
                 {row === mainRow && <AddMediaButton style={addStyle(ROW_HEIGHT.video)} />}
               </div>
             ))}

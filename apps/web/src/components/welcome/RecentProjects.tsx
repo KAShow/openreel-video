@@ -20,6 +20,7 @@ import {
 import { autoSaveManager, checkForRecovery } from "../../services/auto-save";
 import { useProjectStore } from "../../stores/project-store";
 import { useAnalytics, AnalyticsEvents } from "../../hooks/useAnalytics";
+import { forgetProjectThumbnail, projectThumbnail } from "../../hawsh/project-thumbs";
 
 interface RecentProject {
   id: string;
@@ -70,6 +71,23 @@ function getProjectInitial(name: string): string {
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
+/** A frame of the project's first clip, over a blurred copy so tall and wide videos both fill the card. */
+function ProjectThumbnail({ projectId, saveId }: { projectId: string; saveId: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void projectThumbnail(projectId, saveId).then((next) => { if (live) setUrl(next); });
+    return () => { live = false; };
+  }, [projectId, saveId]);
+  if (!url) return null;
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-black transition-transform duration-500 group-hover:scale-[1.03]" data-testid="project-thumbnail" aria-hidden>
+      <img src={url} alt="" draggable={false} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl" />
+      <img src={url} alt="" draggable={false} className="absolute inset-0 h-full w-full object-contain" />
+    </div>
+  );
+}
 
 export function RecentProjects({
   onProjectSelected,
@@ -219,6 +237,7 @@ export function RecentProjects({
     setActionError("");
     try {
       await autoSaveManager.clearProjectSaves(pendingDelete.id);
+      forgetProjectThumbnail(pendingDelete.id);
       setRecentProjects((projects) =>
         projects.filter((project) => project.id !== pendingDelete.id),
       );
@@ -528,15 +547,17 @@ export function RecentProjects({
                       aria-hidden
                     />
                     <div className="absolute inset-0 flex items-center justify-center" aria-hidden>
-                      {isOpening ? (
-                        <Loader2 size={30} className="animate-spin text-primary" />
-                      ) : (
-                        <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-background/60 text-primary shadow-md backdrop-blur-sm transition-transform duration-200 group-hover:scale-105">
-                          <span className="text-2xl font-semibold">{getProjectInitial(project.name)}</span>
-                          <Film size={13} className="absolute -bottom-2 -left-2 rounded-full bg-primary p-0.5 text-primary-foreground" />
-                        </div>
-                      )}
+                      <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-background/60 text-primary shadow-md backdrop-blur-sm transition-transform duration-200 group-hover:scale-105">
+                        <span className="text-2xl font-semibold">{getProjectInitial(project.name)}</span>
+                        <Film size={13} className="absolute -bottom-2 -left-2 rounded-full bg-primary p-0.5 text-primary-foreground" />
+                      </div>
                     </div>
+                    <ProjectThumbnail projectId={project.id} saveId={project.saveId} />
+                    {isOpening && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-background/70" aria-hidden>
+                        <Loader2 size={30} className="animate-spin text-primary" />
+                      </div>
+                    )}
                     <div className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/35 px-2.5 py-1 text-[10px] text-white/85 backdrop-blur-md">
                       <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
                       محفوظ محليًا

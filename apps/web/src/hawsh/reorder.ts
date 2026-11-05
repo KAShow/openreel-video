@@ -4,6 +4,7 @@
  * between places stay as they were, and clips outside the moved range do not move. Stock OpenReel moves
  * an overlapping drop to another track instead.
  */
+import { create } from "zustand";
 import { useProjectStore } from "../stores/project-store";
 import { moveLinkedCaptions } from "../utils/linked-caption-edit";
 
@@ -122,6 +123,30 @@ export async function applyMoves(moves: readonly Move[]): Promise<boolean> {
   }
   await dropBrokenTransitions(moves.map((m) => m.id));
   return true;
+}
+
+/**
+ * What a drop would do, shown while the desktop drag is in the air: where the other clips would go and
+ * the slot the dragged clip would land in. Empty when the drop is on free time or another track.
+ */
+interface DropPreview { trackId: string | null; starts: Record<string, number>; slot: { start: number; duration: number } | null }
+const NO_PREVIEW: DropPreview = { trackId: null, starts: {}, slot: null };
+export const useDropPreview = create<DropPreview>(() => NO_PREVIEW);
+
+export function clearDropPreview(): void {
+  if (useDropPreview.getState() !== NO_PREVIEW) useDropPreview.setState(NO_PREVIEW, true);
+}
+
+export function showDropPreview(clipId: string, trackId: string, originStart: number, dropStart: number): void {
+  const slots = trackSlots(clipId, originStart);
+  if (!overlapsOthers(slots, clipId, dropStart)) { clearDropPreview(); return; }
+  const dragged = slots.find((s) => s.id === clipId);
+  const moves = reorderPlan(slots, clipId, dropStart, true);
+  const start = moves.find((m) => m.id === clipId)?.start;
+  if (!dragged || start === undefined) { clearDropPreview(); return; }
+  const starts: Record<string, number> = {};
+  for (const m of moves) if (m.id !== clipId) starts[m.id] = m.start;
+  useDropPreview.setState({ trackId, starts, slot: { start, duration: dragged.duration } }, true);
 }
 
 /**
