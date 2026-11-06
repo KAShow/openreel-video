@@ -3,11 +3,10 @@ import { ToastContainer } from "./components/Toast";
 import { MobileBlocker } from "./components/MobileBlocker";
 import { SplashScreen } from "./components/SplashScreen";
 import { WelcomeScreen } from "./components/welcome";
-import { RecoveryDialog } from "./components/welcome/RecoveryDialog";
 import { useUIStore } from "./stores/ui-store";
 import { useProjectStore } from "./stores/project-store";
 import { useRouter } from "./hooks/use-router";
-import { useProjectRecovery } from "./hooks/useProjectRecovery";
+import { useLastProject } from "./hooks/useLastProject";
 import { useKieAIPoller } from "./hooks/useKieAIPoller";
 import { SKIP_WELCOME } from "./hawsh/simple";
 import { DEFAULT_PROJECT_SETTINGS } from "./stores/project/project-helpers";
@@ -42,10 +41,12 @@ function App() {
   const skipWelcomeScreen = useUIStore((state) => state.skipWelcomeScreen);
   const openSearchModal = useUIStore((state) => state.openModal);
   const [hasOpenedScriptView, setHasOpenedScriptView] = useState(false);
-  const [isRecovering, setIsRecovering] = useState(false);
+  const [isOpeningLast, setIsOpeningLast] = useState(false);
+  const triedLastProject = useRef(false);
   const createNewProject = useProjectStore((state) => state.createNewProject);
+  const recoverFromAutoSave = useProjectStore((state) => state.recoverFromAutoSave);
   const hasOpenProject = useProjectStore((state) => state.hasOpenProject);
-  const { isChecking, showDialog, availableSaves, recover, dismiss, clearAll } = useProjectRecovery();
+  const { isChecking, lastSaveId } = useLastProject();
 
   const { route, params, navigate, parsedDimensions, fps } = useRouter();
   const hasHandledInitialRoute = useRef(false);
@@ -59,7 +60,7 @@ function App() {
   }, [activeModal]);
 
   useEffect(() => {
-    if (hasHandledInitialRoute.current || isChecking || showDialog || isRecovering) return;
+    if (hasHandledInitialRoute.current || isChecking) return;
 
     if (route === "new") {
       hasHandledInitialRoute.current = true;
@@ -115,16 +116,22 @@ function App() {
     navigate,
     skipWelcomeScreen,
     isChecking,
-    showDialog,
-    isRecovering,
   ]);
 
   useEffect(() => {
-    // Recovery owns the choice until it settles. A bare editor URL still needs
+    // A bare editor URL, such as a reload, continues the last project. It still needs
     // a real project for autosave and preview-proxy lifecycle subscriptions.
-    if (showWelcome || isSharePage || route === "new" || isChecking || showDialog || isRecovering || hasOpenProject) return;
+    if (showWelcome || isSharePage || route === "new" || isChecking || isOpeningLast || hasOpenProject) return;
+    if (lastSaveId && !triedLastProject.current) {
+      triedLastProject.current = true;
+      setIsOpeningLast(true);
+      void recoverFromAutoSave(lastSaveId)
+        .catch((error) => console.warn("[App] Failed to open the last project:", error))
+        .finally(() => setIsOpeningLast(false));
+      return;
+    }
     createNewProject("مشروع جديد");
-  }, [showWelcome, isSharePage, route, isChecking, showDialog, isRecovering, hasOpenProject, createNewProject]);
+  }, [showWelcome, isSharePage, route, isChecking, isOpeningLast, hasOpenProject, lastSaveId, recoverFromAutoSave, createNewProject]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -161,7 +168,7 @@ function App() {
       ) : showWelcome ? (
         <WelcomeScreen initialTab={initialTab} />
       ) : !hasOpenProject || route === "new" ? (
-        <SplashScreen status={isChecking ? "نبحث عن مشاريعك المحفوظة…" : showDialog ? "اختر مشروعًا محفوظًا أو ابدأ من جديد" : "نفتح المشروع…"} />
+        <SplashScreen status={isChecking ? "نبحث عن مشاريعك المحفوظة…" : "نفتح المشروع…"} />
       ) : (
         <Suspense fallback={<SplashScreen status="نفتح المحرر…" />}>
           <EditorInterface />
@@ -172,28 +179,6 @@ function App() {
         {(hasOpenedScriptView || activeModal === "scriptView") && <ScriptViewDialog isOpen={activeModal === "scriptView"} onClose={closeModal} />}
         {activeModal === "search" && <SearchModal isOpen onClose={closeModal} />}
       </Suspense>
-      {showDialog && !showWelcome && availableSaves.length > 0 && (
-        <RecoveryDialog
-          saves={availableSaves}
-          onRecover={async (saveId) => {
-            // Loading a snapshot updates the store before the hash navigation
-            // settles. Claim the initial route first so /new cannot replace it.
-            const previouslyHandled = hasHandledInitialRoute.current;
-            hasHandledInitialRoute.current = true;
-            setIsRecovering(true);
-            let success = false;
-            try {
-              success = await recover(saveId);
-              if (success) navigate("editor");
-            } finally {
-              if (!success) hasHandledInitialRoute.current = previouslyHandled;
-              setIsRecovering(false);
-            }
-          }}
-          onDismiss={dismiss}
-          onClearAll={clearAll}
-        />
-      )}
     </div>
   );
 }
