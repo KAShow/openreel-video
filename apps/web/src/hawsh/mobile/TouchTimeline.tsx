@@ -10,9 +10,10 @@
  * Learning from CapCut, stage 2: video clips show a strip of frames, the white "+" sits at the end of
  * the main track, empty "+ add text" / "+ add audio" lanes invite the next step, the ruler reads 00:00,
  * and a clip that is not at 1× shows its speed.
+ * Two fingers or the − / + buttons zoom the timeline around the playhead (zoom.ts).
  */
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 import { useProjectStore } from "../../stores/project-store";
 import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
@@ -22,6 +23,7 @@ import { AddMediaButton } from "./AddSheets";
 import { importFiles, mainTrack } from "./add-tools";
 import { moveOnTrack, reorderPlan, type Slot } from "../reorder";
 import { toast } from "../../stores/notification-store";
+import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, ZOOM_STEP, clampZoom, pinchZoom, rulerStep } from "./zoom";
 
 type Side = "start" | "end";
 interface Drag { id: string; side: Side; x0: number; dx: number }
@@ -37,20 +39,19 @@ const EDGE_ZONE = 48;
 const EDGE_SPEED = 6;
 const rowKey = (r: { trackId: string; kind: RowKind }) => `${r.trackId}-${r.kind}`;
 
-export const PIXELS_PER_SECOND = 56;
 const ROW_HEIGHT: Record<RowKind, number> = { video: 56, text: 30, audio: 26 };
 const ADD_SIZE = 44;
 
 const mmss = (t: number) => `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 
 /** Frames along a video clip, one square tile per tile width, each from the source time under it. */
-const Filmstrip: React.FC<{ clip: RowClip; shownStart: number; width: number }> = ({ clip, shownStart, width }) => {
+const Filmstrip: React.FC<{ clip: RowClip; shownStart: number; width: number; zoom: number }> = ({ clip, shownStart, width, zoom }) => {
   const tile = ROW_HEIGHT.video;
   const tiles = Math.max(1, Math.ceil(width / tile));
   return (
     <span className="pointer-events-none absolute inset-0 flex overflow-hidden" aria-hidden>
       {Array.from({ length: tiles }, (_, i) => {
-        const source = clip.inPoint + ((shownStart - clip.start) + (i * tile + tile / 2) / PIXELS_PER_SECOND) * clip.speed;
+        const source = clip.inPoint + ((shownStart - clip.start) + (i * tile + tile / 2) / zoom) * clip.speed;
         const url = frameAt(clip.frames, source) ?? clip.thumb;
         return url
           ? <img key={i} src={url} alt="" draggable={false} className="h-full shrink-0 object-cover" style={{ width: tile }} />
@@ -88,6 +89,10 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
   const scroller = useRef<HTMLDivElement>(null);
   const programmatic = useRef(-1);
   const [half, setHalf] = useState(180);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const pinch = useRef<{ zoom: number; distance: number } | null>(null);
 
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -99,24 +104,25 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
     return () => ro.disconnect();
   }, []);
 
-  // Playhead (playing, seeks from elsewhere) → scroll position.
-  useEffect(() => {
+  // Playhead (playing, seeks from elsewhere, zoom) → scroll position. Before paint, so a zoom never
+  // shows the wrong spot under the playhead.
+  useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const x = playhead * PIXELS_PER_SECOND;
+    const x = playhead * zoom;
     if (Math.abs(el.scrollLeft - x) < 1) return;
     programmatic.current = x;
     el.scrollLeft = x;
-  }, [playhead, half]);
+  }, [playhead, half, zoom]);
 
   // Finger scroll → playhead.
   const onScroll = () => {
     const el = scroller.current;
-    if (!el) return;
+    if (!el || pinch.current) return;
     if (programmatic.current >= 0 && Math.abs(el.scrollLeft - programmatic.current) < 2) return;
     programmatic.current = -1;
     if (playing) pause();
-    seekTo(Math.min(duration, Math.max(0, el.scrollLeft / PIXELS_PER_SECOND)));
+    seekTo(Math.min(duration, Math.max(0, el.scrollLeft / zoom)));
   };
 
   // Long press, then drag: move the clip earlier or later.
@@ -166,7 +172,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
     if (pressRef.current && Math.hypot(e.clientX - pressAt.current.x, e.clientY - pressAt.current.y) > PRESS_SLOP) clearPress();
     syncMove();
   };
-  const dropStart = (m: Moving) => Math.max(0, m.origin + m.dx / PIXELS_PER_SECOND);
+  const dropStart = (m: Moving) => Math.max(0, m.origin + m.dx / zoom);
   const slotsOf = (key: string): Slot[] => (rows.find((r) => rowKey(r) === key)?.clips ?? []).map((c) => ({ id: c.id, start: c.start, duration: c.duration }));
   const liftFinger = () => {
     clearPress();
@@ -188,13 +194,38 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
   };
   const isMoving = moving !== null;
 
-  // Once a clip is lifted the finger drags it, not the timeline.
+  // Once a clip is lifted the finger drags it, not the timeline. Two fingers elsewhere zoom it.
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const stop = (ev: TouchEvent) => { if (movingRef.current) ev.preventDefault(); };
-    el.addEventListener("touchmove", stop, { passive: false });
-    return () => el.removeEventListener("touchmove", stop);
+    const distance = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const start = (ev: TouchEvent) => {
+      if (ev.touches.length !== 2 || movingRef.current || dragRef.current) return;
+      clearPress();
+      pinch.current = { zoom: zoomRef.current, distance: distance(ev.touches) };
+    };
+    const move = (ev: TouchEvent) => {
+      if (movingRef.current) { ev.preventDefault(); return; }
+      if (!pinch.current || ev.touches.length < 2) return;
+      if (ev.cancelable) ev.preventDefault();
+      setZoom(pinchZoom(pinch.current.zoom, pinch.current.distance, distance(ev.touches)));
+    };
+    const end = (ev: TouchEvent) => { if (ev.touches.length < 2) pinch.current = null; };
+    // Safari zooms the whole page on a pinch unless told not to.
+    const stopPageZoom = (ev: Event) => ev.preventDefault();
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: false });
+    el.addEventListener("touchend", end);
+    el.addEventListener("touchcancel", end);
+    el.addEventListener("gesturestart", stopPageZoom);
+    return () => {
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", end);
+      el.removeEventListener("gesturestart", stopPageZoom);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A finger held at a screen edge scrolls the timeline, so a clip can travel past what is visible.
@@ -222,7 +253,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
   // Edge-handle trim. The ref keeps pointer handlers in step between renders.
   const dragRef = useRef<Drag | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const cutFor = (c: RowClip, d: Drag) => edgeCutTime(c.start, c.duration, d.side, d.dx / PIXELS_PER_SECOND);
+  const cutFor = (c: RowClip, d: Drag) => edgeCutTime(c.start, c.duration, d.side, d.dx / zoom);
   const shown = (c: RowClip) => {
     if (moving?.id === c.id) return { start: dropStart(moving), duration: c.duration };
     const planned = moving ? plan.get(c.id) : undefined;
@@ -253,17 +284,18 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
     if (target) void trimAt(target, cut, d.side);
   };
 
-  const width = duration * PIXELS_PER_SECOND + half * 2;
+  const width = duration * zoom + half * 2;
   const isSelected = (id: string) => selected.some((s) => s.id === id);
-  const ticks = Array.from({ length: Math.floor(duration) + 1 }, (_, i) => i);
+  const labelStep = rulerStep(zoom);
+  const ticks = Array.from({ length: Math.floor((duration * 2) / labelStep) + 1 }, (_, i) => (i * labelStep) / 2);
 
   // The white "+" follows the end of the main track (where new clips land), clear of a trim handle.
   const mainRow = rows.find((r) => r.kind === "video" && r.trackId === mainId) ?? rows.find((r) => r.kind === "video");
   const mainEnd = mainRow ? Math.max(...mainRow.clips.map((c) => { const s = shown(c); return s.start + s.duration; })) : 0;
   const addStyle = (rowHeight: number): React.CSSProperties => ({
-    left: half + mainEnd * PIXELS_PER_SECOND + (mainRow ? HANDLE + 4 : 4), top: (rowHeight - ADD_SIZE) / 2, width: ADD_SIZE, height: ADD_SIZE,
+    left: half + mainEnd * zoom + (mainRow ? HANDLE + 4 : 4), top: (rowHeight - ADD_SIZE) / 2, width: ADD_SIZE, height: ADD_SIZE,
   });
-  const laneWidth = Math.max(duration * PIXELS_PER_SECOND, 150);
+  const laneWidth = Math.max(duration * zoom, 150);
   const audioInput = useRef<HTMLInputElement>(null);
 
   return (
@@ -274,8 +306,8 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
         <div className="relative" style={{ width, minHeight: "100%" }}>
           <div className="relative h-6 text-[10px] text-fg-muted" aria-hidden>
             {ticks.map((t) => (
-              <div key={t} className="absolute top-0 flex h-full -translate-x-1/2 items-center" style={{ left: half + t * PIXELS_PER_SECOND }}>
-                {t % 2 === 0 ? <span className="tabular-nums">{mmss(t)}</span> : <span className="h-1 w-1 rounded-full bg-fg-muted" />}
+              <div key={t} className="absolute top-0 flex h-full -translate-x-1/2 items-center" style={{ left: half + t * zoom }}>
+                {t % labelStep === 0 ? <span className="tabular-nums">{mmss(t)}</span> : <span className="h-1 w-1 rounded-full bg-fg-muted" />}
               </div>
             ))}
           </div>
@@ -284,8 +316,8 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
               <div key={`${row.trackId}-${row.kind}`} className="relative" style={{ height: ROW_HEIGHT[row.kind] }}>
                 {row.clips.map((c) => {
                   const s = shown(c);
-                  const left = half + s.start * PIXELS_PER_SECOND;
-                  const w = Math.max(8, s.duration * PIXELS_PER_SECOND - 2);
+                  const left = half + s.start * zoom;
+                  const w = Math.max(8, s.duration * zoom - 2);
                   return (
                     <React.Fragment key={c.id}>
                       <button type="button" title={c.label} data-testid="timeline-clip"
@@ -300,7 +332,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
                           row.kind === "video" ? "bg-bg-3" : row.kind === "text" ? "bg-amber-500/80" : "bg-teal-500/70"} ${
                           moving?.id === c.id ? "z-20 -translate-y-1.5 opacity-60 shadow-xl ring-2 ring-white" : moving ? "transition-[left] duration-150" : ""}`}
                         style={{ left, width: w }}>
-                        {row.kind === "video" && <Filmstrip clip={c} shownStart={s.start} width={w} />}
+                        {row.kind === "video" && <Filmstrip clip={c} shownStart={s.start} width={w} zoom={zoom} />}
                         {row.kind === "video" && Math.abs(c.speed - 1) > 0.001 && (
                           <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] font-semibold tabular-nums text-white">{c.speed}×</span>
                         )}
@@ -336,7 +368,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
                   return (
                     <span data-testid="drop-slot" aria-hidden
                       className="pointer-events-none absolute top-0 z-30 h-full rounded-md border-2 border-dashed border-primary bg-primary/30 transition-[left] duration-150"
-                      style={{ left: half + slot * PIXELS_PER_SECOND, width: Math.max(8, dragged.duration * PIXELS_PER_SECOND - 2) }} />
+                      style={{ left: half + slot * zoom, width: Math.max(8, dragged.duration * zoom - 2) }} />
                   );
                 })()}
                 {row === mainRow && <AddMediaButton style={addStyle(ROW_HEIGHT.video)} />}
@@ -363,6 +395,14 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
         onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; if (files.length) void importFiles(files); }} />
       {/* Fixed playhead in the middle. */}
       <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)]" aria-hidden />
+      {!moving && (
+        <div className="absolute bottom-2 right-2 z-30 flex overflow-hidden rounded-full bg-black/70 text-white" data-testid="timeline-zoom">
+          <button type="button" aria-label="تصغير الخط الزمني" disabled={zoom <= MIN_ZOOM} onClick={() => setZoom(clampZoom(zoom / ZOOM_STEP))}
+            className="grid h-9 w-9 place-items-center active:bg-white/10 disabled:opacity-30"><Minus size={16} aria-hidden /></button>
+          <button type="button" aria-label="تكبير الخط الزمني" disabled={zoom >= MAX_ZOOM} onClick={() => setZoom(clampZoom(zoom * ZOOM_STEP))}
+            className="grid h-9 w-9 place-items-center active:bg-white/10 disabled:opacity-30"><Plus size={16} aria-hidden /></button>
+        </div>
+      )}
     </div>
   );
 };
