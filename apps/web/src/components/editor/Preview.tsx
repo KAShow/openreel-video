@@ -89,7 +89,7 @@ import {
   PreviewResourceManager,
 } from "./preview/index";
 import { snapCanvasPosition } from "./preview/canvas-snapping";
-import { captureNativeVideoFrame } from "./preview/video-frame";
+import { captureNativeVideoFrame, seekVideoToFrame } from "./preview/video-frame";
 import { resolvePlaybackLoop, resolvePlaybackStart } from "../../utils/playback-loop";
 import { ProcessingOverlay } from "./ProcessingOverlay";
 import { editingFrameDurationMs } from "./editing-frame-rate";
@@ -199,7 +199,6 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
   const scrubVideoReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const lastPreviewRenderTimeRef = useRef(0);
   const offscreenCtxRef = useRef<OffscreenCanvasRenderingContext2D | null>(
     null,
   );
@@ -331,9 +330,18 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
     if (scrubVideoReleaseTimerRef.current) {
       clearTimeout(scrubVideoReleaseTimerRef.current);
     }
+    // Reopening the file costs far more than the seek, so the video stays open while editing.
     scrubVideoReleaseTimerRef.current = setTimeout(() => {
       releaseScrubVideoElements();
-    }, 350);
+    }, 30_000);
+  }, [releaseScrubVideoElements]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden) releaseScrubVideoElements();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [releaseScrubVideoElements]);
 
   // Persistent decoder cache for efficient playback (legacy - kept for fallback)
@@ -1114,6 +1122,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         inPoint?: number;
       },
       time: number,
+      onCancelled?: () => void,
     ): Promise<ImageBitmap | null> => {
       const mediaItem = getMediaItem(clip.mediaId);
       if (!mediaItem?.blob) return null;
@@ -1146,13 +1155,17 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
       decodeDebounceResolveRef.current = null;
 
       return new Promise<ImageBitmap | null>((resolve) => {
-        decodeDebounceResolveRef.current = resolve;
+        const cancel = () => {
+          onCancelled?.();
+          resolve(null);
+        };
+        decodeDebounceResolveRef.current = cancel;
         decodeDebounceRef.current = setTimeout(async () => {
           decodeDebounceRef.current = null;
           decodeDebounceResolveRef.current = null;
 
           if (isStaleRequest()) {
-            resolve(null);
+            cancel();
             return;
           }
 
@@ -1174,7 +1187,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
               video.src = url;
               video.muted = true;
               video.playsInline = true;
-              video.preload = "metadata";
+              video.preload = "auto";
               video.crossOrigin = "anonymous";
 
               await new Promise<void>((res, rej) => {
@@ -1194,7 +1207,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
 
               if (isStaleRequest()) {
                 releaseVideoElement({ video, url });
-                resolve(null);
+                cancel();
                 return;
               }
 
@@ -1216,56 +1229,15 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
             const seekTime =
               clampedTime <= 0 && video.duration > 0.002 ? 0.001 : clampedTime;
             if (
+              video.seeking ||
               Math.abs(video.currentTime - seekTime) > 0.01 ||
               video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
             ) {
-              video.currentTime = seekTime;
-              await new Promise<void>((res) => {
-                let settled = false;
-                let timeoutId: ReturnType<typeof setTimeout> | null = null;
-                const onSeeked = () => {
-                  if (settled) return;
-                  settled = true;
-                  if (timeoutId) clearTimeout(timeoutId);
-                  video.removeEventListener("seeked", onSeeked);
-                  res();
-                };
-                video.addEventListener("seeked", onSeeked);
-                timeoutId = setTimeout(() => {
-                  if (settled) return;
-                  settled = true;
-                  video.removeEventListener("seeked", onSeeked);
-                  res();
-                }, 250);
-              });
+              await seekVideoToFrame(video, seekTime);
             }
 
             if (isStaleRequest()) {
-              resolve(null);
-              return;
-            }
-
-            await new Promise<void>((res) => {
-              if (!("requestVideoFrameCallback" in video)) {
-                res();
-                return;
-              }
-
-              let settled = false;
-              let timeoutId: ReturnType<typeof setTimeout> | null = null;
-              const finish = () => {
-                if (settled) return;
-                settled = true;
-                if (timeoutId) clearTimeout(timeoutId);
-                res();
-              };
-
-              video.requestVideoFrameCallback(finish);
-              timeoutId = setTimeout(finish, 300);
-            });
-
-            if (isStaleRequest()) {
-              resolve(null);
+              cancel();
               return;
             }
 
@@ -1292,20 +1264,24 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
             });
 
             if (isStaleRequest()) {
-              resolve(null);
+              cancel();
               return;
             }
 
             const frame = await captureNativeVideoFrame(video);
             if (isStaleRequest()) {
               frame.close();
-              resolve(null);
+              cancel();
               return;
             }
             scheduleScrubVideoRelease();
             resolve(frame);
           } catch {
-            if (!isStaleRequest()) failProxyPlayback(clip.mediaId, mediaBlob);
+            if (isStaleRequest()) {
+              cancel();
+              return;
+            }
+            failProxyPlayback(clip.mediaId, mediaBlob);
             const cached = videoElementCacheRef.current.get(clip.mediaId);
             if (cached) {
               releaseVideoElement(cached);
@@ -1314,7 +1290,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
             scheduleScrubVideoRelease();
             resolve(null);
           }
-        }, 50);
+        }, 0);
       });
     },
     [
@@ -1361,6 +1337,13 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
 
       const mainCtx = canvas.getContext("2d");
       if (!mainCtx) return false;
+
+      // A newer request took over this decode, so this render has a hole in it. Whoever
+      // took over paints the result; until then the picture on screen stays.
+      let decodeCancelled = false;
+      const markDecodeCancelled = () => {
+        decodeCancelled = true;
+      };
 
       // Compound clips are full nested timelines rather than media blobs.
       // Route those frames through the canonical compositor so preview and
@@ -1436,9 +1419,9 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
 
       if (transitionInfo) {
         try {
-          const clipAFrame = await decodeClipFrame(transitionInfo.clipA, time);
+          const clipAFrame = await decodeClipFrame(transitionInfo.clipA, time, markDecodeCancelled);
           const clipBFrame = transitionInfo.clipB
-            ? await decodeClipFrame(transitionInfo.clipB, time)
+            ? await decodeClipFrame(transitionInfo.clipB, time, markDecodeCancelled)
             : null;
           const blankFrame = transitionInfo.clipB
             ? null
@@ -1695,7 +1678,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
               const clipEnd = clip.startTime + clip.duration;
 
               if (time >= clipStart && time < clipEnd) {
-                const frame = await decodeClipFrame(clip, time);
+                const frame = await decodeClipFrame(clip, time, markDecodeCancelled);
 
                 if (frame) {
                   // The decoder returns native, un-letterboxed frames for both
@@ -1917,6 +1900,8 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         );
         hasRenderedFrame = hasRenderedFrame || adjusted;
       }
+
+      if (decodeCancelled) return true;
 
       if (hasRenderedFrame && offscreenCanvasRef.current) {
         mainCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -3228,6 +3213,9 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
       return;
     }
 
+    // Playback opens its own video; phones allow few decoders at once.
+    releaseScrubVideoElements();
+
     let isActive = true;
     let nativeCleanup: ((preserveCaches?: boolean) => void) | null = null;
 
@@ -4442,6 +4430,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
     proxySourceRevision,
     cleanupPlaybackResources,
     cleanupAudioResources,
+    releaseScrubVideoElements,
     setupAudioFromAudioTrack,
     preDecodeAllAudioBuffers,
     getAudioClipsForScheduler,
@@ -4493,14 +4482,6 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
     lastProxyRevisionForRenderRef.current = proxySourceRevision;
     lastPlayheadForRenderRef.current = playheadPosition;
 
-    const previousRenderTime = lastPreviewRenderTimeRef.current;
-    const isLargeJump =
-      Math.abs(playheadPosition - previousRenderTime) > 1 ||
-      playheadPosition < previousRenderTime - 0.25;
-    if (isLargeJump) {
-      releaseScrubVideoElements();
-    }
-    lastPreviewRenderTimeRef.current = playheadPosition;
 
     const doRender = async (time: number) => {
       if (renderInFlightRef.current) {
@@ -4552,7 +4533,6 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
     isScrubbing,
     renderFrameDirectly,
     renderFallbackFrame,
-    releaseScrubVideoElements,
     project,
     proxySourceRevision,
     isDark,
