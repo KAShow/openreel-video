@@ -1,6 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+overrides:
+  # أمني: protobufjs >=7.5.4 الحرج (تنفيذ كود اعتباطي GHSA عبر onnxruntime/posthog)
+  protobufjs: ">=7.5.5"
 patchedDependencies:
   "@ffmpeg/core-mt@0.12.6": "patches/@ffmpeg__core-mt@0.12.6.patch"
   "@ffmpeg/core@0.12.6": "patches/@ffmpeg__core@0.12.6.patch"
