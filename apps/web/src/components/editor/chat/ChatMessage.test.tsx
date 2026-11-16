@@ -78,4 +78,14 @@ describe("ChatMessage", () => {
     );
     expect(screen.getByText("The model stopped at its response limit.")).toBeInTheDocument();
   });
+
+  it("shows the points a request consumed under the reply", () => {
+    render(<ChatMessage message={{ ...assistantMessage("Done."), cost: { steps: 3, points: 0.3 } }} />);
+    expect(screen.getByText("استهلك هذا الطلب 0.3 نقطة (3 خطوات)")).toHaveAttribute("dir", "rtl");
+  });
+
+  it("shows no cost line when nothing was charged", () => {
+    render(<ChatMessage message={assistantMessage("Done.")} />);
+    expect(screen.queryByText(/استهلك هذا الطلب/)).toBeNull();
+  });
 });

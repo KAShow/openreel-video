@@ -12,6 +12,7 @@ import type {
 import { runExclusive } from "../services/agent/host-singleton";
 import { validateAIEndpoint } from "../services/agent/direct-llm-transport";
 import { HAWSH_AI_ONLY_MESSAGE, isHawshAI, makeHawshAIClient } from "../hawsh/ai";
+import { turnCost, type ChatTurnCost } from "../hawsh/ai-cost";
 import { msg } from "../hawsh/i18n/messages";
 import { EditingSession } from "../services/agent/editing-session";
 import { editingToolDefs, editingToolReadOnly, executeEditingTool, EDITING_SYSTEM } from "../services/agent/editing-tools";
@@ -41,6 +42,8 @@ export interface ChatMessage {
   readonly text: string;
   readonly toolCalls: ToolCallView[];
   readonly notice?: string;
+  /** Director's Eyes points this request consumed (assistant messages; UI only, never sent to the model). */
+  readonly cost?: ChatTurnCost;
 }
 
 interface PendingConfirm {
@@ -266,7 +269,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ status: "error", error: HAWSH_AI_ONLY_MESSAGE, abortController: null });
       return;
     }
-    try { llm = makeHawshAIClient(controller.signal); } catch (error) {
+    // Model calls the server charged in this turn (successful replies only; see makeHawshAIClient).
+    let chargedSteps = 0;
+    const spent = (): ChatTurnCost | undefined => (chargedSteps > 0 ? turnCost(chargedSteps) : undefined);
+    try { llm = makeHawshAIClient(controller.signal, () => { chargedSteps++; }); } catch (error) {
       set({ status: "error", error: error instanceof Error ? error.message : msg("chat.error.connection"), abortController: null });
       return;
     }
@@ -300,6 +306,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     );
     } catch (error) {
       if (activeSeq !== seq) return;
+      // A failed turn still costs the steps the server charged before it failed.
+      const cost = spent();
+      if (cost) updateAssistant((m) => ({ ...m, cost }));
       set({ status: controller.signal.aborted ? "idle" : "error", error: controller.signal.aborted ? null : error instanceof Error ? error.message : msg("chat.error.turnFailed"), abortController: null, pendingConfirm: null, conversation: [] });
       saveConversationSnapshot(get()); return;
     }
@@ -329,6 +338,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...message,
           text: finalText,
           notice: stopNotice ?? emptyNotice,
+          cost: spent(),
           toolCalls: message.toolCalls.map((tc) => !result.committed && tc.status === "retrying" ? { ...tc, status: "error" } : tc),
         };
       }),
