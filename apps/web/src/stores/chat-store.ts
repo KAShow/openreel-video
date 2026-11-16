@@ -15,7 +15,9 @@ import { HAWSH_AI_ONLY_MESSAGE, isHawshAI, makeHawshAIClient } from "../hawsh/ai
 import { turnCost, type ChatTurnCost } from "../hawsh/ai-cost";
 import { msg } from "../hawsh/i18n/messages";
 import { EditingSession } from "../services/agent/editing-session";
-import { editingToolDefs, editingToolNeedsConfirm, editingToolReadOnly, executeEditingTool, EDITING_SYSTEM } from "../services/agent/editing-tools";
+import { editingToolDefs, editingToolNeedsConfirm, editingToolReadOnly, executeEditingTool } from "../services/agent/editing-tools";
+import { assistantSystem } from "../hawsh/assistant-prompt";
+import { forgivingExecutor } from "../hawsh/assistant-recovery";
 import { transcribeChargeNotice, transcribeConfirmNote, transcribePointsCharged } from "../hawsh/transcribe-tool";
 import { useAIConnectionStore } from "./ai-connection-store";
 import {
@@ -24,6 +26,8 @@ import {
 } from "./chat-history-store";
 import { useSettingsStore } from "./settings-store";
 import { useProjectStore } from "./project-store";
+import { useTimelineStore } from "./timeline-store";
+import { useUIStore } from "./ui-store";
 
 export type ChatStatus = "idle" | "running" | "awaiting_confirm" | "error";
 
@@ -102,13 +106,30 @@ function undoStackSize(): number | null {
   }
 }
 
+/** Model steps per request. The last one must be the reply: a turn that runs out is discarded whole. */
+const MAX_STEPS = 16;
+/** Earlier messages the model is shown (text only), and the most characters kept of each. */
+const HISTORY_MESSAGES = 16;
+const HISTORY_CHARS = 1500;
+
+/**
+ * What the model sees of the conversation: the words only, most recent first to go. Tool calls and
+ * their results are left out on purpose. Every request carries a fresh view of the project
+ * (assistantSystem), so old results would only repeat stale IDs, and preview frames would pile up
+ * until the server refuses the request. A failed turn keeps its place, so the model knows it failed.
+ */
 function conversationFromMessages(messages: ChatMessage[]): LoopMessage[] {
-  return messages.flatMap((message): LoopMessage[] => {
-    if (!message.text.trim()) return [];
+  const cut = (text: string): string => (text.length > HISTORY_CHARS ? `${text.slice(0, HISTORY_CHARS)}…` : text);
+  const history = messages.flatMap((message): LoopMessage[] => {
+    const text = [message.text, message.role === "assistant" ? message.notice : undefined].filter((part) => part?.trim()).join("\n");
+    if (!text) return [];
     return message.role === "user"
-      ? [{ role: "user", content: message.text }]
-      : [{ role: "assistant", content: message.text, toolUses: [] }];
-  });
+      ? [{ role: "user", content: cut(text) }]
+      : [{ role: "assistant", content: cut(text), toolUses: [] }];
+  }).slice(-HISTORY_MESSAGES);
+  // A conversation opens with the user.
+  while (history.length && history[0].role !== "user") history.shift();
+  return history;
 }
 
 function saveConversationSnapshot(state: ChatState): void {
@@ -197,7 +218,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     set((state) => ({
       messages: [...state.messages, userMessage, assistantMessage],
-      conversation: [...state.conversation, { role: "user", content: trimmed }],
+      conversation: [...conversationFromMessages(state.messages), { role: "user", content: trimmed }],
       status: "running",
       error: null,
       abortController: controller,
@@ -283,6 +304,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const autoConfirm = useSettingsStore.getState().agentAutoConfirm;
     const dryRun = useSettingsStore.getState().agentDryRun;
     const pointsBefore = transcribePointsCharged();
+    // Small mistakes go back to the model instead of discarding the turn (src/hawsh/assistant-recovery.ts).
+    const forgiving = forgivingExecutor(executeEditingTool, editingToolReadOnly, () => {
+      const left = MAX_STEPS - chargedSteps;
+      return left <= 2 ? `Step budget: ${left} left. The last step must be your reply to the user with no tool calls, or every edit is discarded.` : undefined;
+    });
 
     let result;
     try { result = await runExclusive(() =>
@@ -290,11 +316,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         host,
         llm,
         tools,
-        system: EDITING_SYSTEM,
+        system: assistantSystem(useProjectStore.getState().getFullProject(), {
+          playheadSec: useTimelineStore.getState().playheadPosition,
+          selectedIds: useUIStore.getState().selectedItems.map((item) => item.id),
+        }),
         messages: get().conversation,
-        execute: executeEditingTool,
+        execute: forgiving.execute,
         readOnly: editingToolReadOnly,
         requiresConfirmation: editingToolNeedsConfirm,
+        continueAfterFailure: forgiving.continueAfterFailure,
+        limits: { maxSteps: MAX_STEPS },
         atomic: true,
         signal: controller.signal,
         dryRun,
@@ -318,7 +349,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Transcription points spent before the failure are lost with the discarded draft: say so.
       const chargedNotice = transcribeChargeNotice(transcribePointsCharged() - pointsBefore);
       if (cost || chargedNotice) updateAssistant((m) => ({ ...m, ...(cost ? { cost } : {}), ...(chargedNotice ? { notice: chargedNotice } : {}) }));
-      set({ status: controller.signal.aborted ? "idle" : "error", error: controller.signal.aborted ? null : error instanceof Error ? error.message : msg("chat.error.turnFailed"), abortController: null, pendingConfirm: null, conversation: [] });
+      set((state) => ({ status: controller.signal.aborted ? "idle" : "error", error: controller.signal.aborted ? null : error instanceof Error ? error.message : msg("chat.error.turnFailed"), abortController: null, pendingConfirm: null, conversation: conversationFromMessages(state.messages) }));
       saveConversationSnapshot(get()); return;
     }
 
@@ -333,8 +364,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           : result.stoppedReason === "budget"
             ? msg("chat.stop.budget")
             : undefined;
-    set((state) => ({
-      messages: state.messages.map((message) => {
+    set((state) => {
+      const messages = state.messages.map((message) => {
         if (message.id !== assistantId) return message;
         const finalText = wasAborted ? msg("chat.turn.cancelled") : !result.committed ? msg("chat.turn.failedNoEdits") : result.text || message.text;
         const emptyNotice =
@@ -350,30 +381,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
           text: finalText,
           notice: chargedNotice ?? stopNotice ?? emptyNotice,
           cost: spent(),
-          toolCalls: message.toolCalls.map((tc) => !result.committed && tc.status === "retrying" ? { ...tc, status: "error" } : tc),
+          toolCalls: message.toolCalls.map((tc) => !result.committed && tc.status === "retrying" ? { ...tc, status: "error" as const } : tc),
         };
-      }),
-      conversation: result.committed ? result.messages : [],
-      status: wasAborted
-        ? "idle"
-        : result.stoppedReason === "error"
-          ? "error"
-          : "idle",
-      lastTurnCommitted: result.committed && host.committed,
-      lastTurnUndoSize: result.committed && host.committed ? undoStackSize() : null,
-      lastTurnActionId: result.committed && host.committed ? useProjectStore.getState().actionExecutor.getHistory().peekUndo?.()?.action.id ?? null : null,
-      abortController: null,
-      pendingConfirm: null,
-      usage: {
-        inputTokens: state.usage.inputTokens + result.usage.inputTokens,
-        outputTokens: state.usage.outputTokens + result.usage.outputTokens,
-      },
-      error: wasAborted
-        ? null
-        : result.stoppedReason === "error"
-          ? (state.error ?? msg("chat.error.turnFailed"))
-          : state.error,
-    }));
+      });
+      return {
+        messages,
+        conversation: conversationFromMessages(messages),
+        status: wasAborted
+          ? "idle"
+          : result.stoppedReason === "error"
+            ? "error"
+            : "idle",
+        lastTurnCommitted: result.committed && host.committed,
+        lastTurnUndoSize: result.committed && host.committed ? undoStackSize() : null,
+        lastTurnActionId: result.committed && host.committed ? useProjectStore.getState().actionExecutor.getHistory().peekUndo?.()?.action.id ?? null : null,
+        abortController: null,
+        pendingConfirm: null,
+        usage: {
+          inputTokens: state.usage.inputTokens + result.usage.inputTokens,
+          outputTokens: state.usage.outputTokens + result.usage.outputTokens,
+        },
+        error: wasAborted
+          ? null
+          : result.stoppedReason === "error"
+            ? (state.error ?? msg("chat.error.turnFailed"))
+            : state.error,
+      };
+    });
     saveConversationSnapshot(get());
   },
 

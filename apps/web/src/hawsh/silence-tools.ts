@@ -3,7 +3,9 @@
  * Detection is the editor's own (AudioEngine.detectSilence on the clip's source audio, the same engine as
  * the inspector's "Auto Cut Silence"). Cutting runs on the AI's draft through clip/split + clip/rippleDelete,
  * so the whole result commits — and undoes — as one AI edit. Like ripple delete in the UI, later clips on
- * the same track move left; other tracks are not moved.
+ * the same track move left; other tracks are not moved. The one exception is automatic caption lines
+ * (transcribe-tool.ts) of clips on that track: they follow their speech, so captions can be made first,
+ * while the clip is one piece and costs one transcription, and the silence cut afterwards.
  */
 import { getAudioEngine, type Project } from "@openreel/core";
 import type { EditingHost, ToolResult } from "@openreel/agent";
@@ -123,6 +125,42 @@ export async function applySilenceCuts(host: EditingHost, clipId: string, region
   return null;
 }
 
+/** Where a timeline time lands once `regions` (sorted, not overlapping) are removed. */
+export function timeAfterCuts(t: number, regions: readonly Region[]): number {
+  let removed = 0;
+  for (const r of regions) removed += Math.min(Math.max(t - r.start, 0), r.end - r.start);
+  return round(t - removed);
+}
+
+interface CaptionText { id: string; startTime: number; duration: number; metadata?: { captionSourceClipId?: unknown } }
+
+/** Caption lines whose speech is on `trackId`. Read before cutting: a cut can delete the clip they name. */
+function captionsOfTrack(project: Project, trackId: string): string[] {
+  const onTrack = new Set(project.timeline.tracks.find((t) => t.id === trackId)?.clips.map((c) => c.id));
+  return ((project.textClips ?? []) as unknown as CaptionText[])
+    .filter((t) => typeof t.metadata?.captionSourceClipId === "string" && onTrack.has(t.metadata.captionSourceClipId))
+    .map((t) => t.id);
+}
+
+/** Moves those caption lines to follow the cut; a line that sat wholly inside a removed pause is dropped. */
+async function moveCaptions(host: EditingHost, ids: readonly string[], regions: readonly Region[]): Promise<{ moved: number } | { error: string }> {
+  let moved = 0;
+  for (const id of ids) {
+    const text = ((host.getProject().textClips ?? []) as unknown as CaptionText[]).find((t) => t.id === id);
+    if (!text) continue;
+    const start = timeAfterCuts(text.startTime, regions);
+    const end = timeAfterCuts(text.startTime + text.duration, regions);
+    if (start === text.startTime && round(end - start) === round(text.duration)) continue;
+    const gone = end - start < EDGE;
+    const result = await host.applyAction(gone
+      ? { type: "text/remove", id: crypto.randomUUID(), timestamp: Date.now(), params: { clipId: id } }
+      : { type: "text/update", id: crypto.randomUUID(), timestamp: Date.now(), params: { clipId: id, updates: { startTime: start, duration: round(end - start) } } });
+    if (!result.success) return { error: result.error?.message ?? "Could not move a caption line" };
+    moved++;
+  }
+  return { moved };
+}
+
 export async function cutSilenceTool(args: Record<string, unknown>, host: EditingHost): Promise<ToolResult> {
   const opts = silenceOptions(args);
   const clipId = String(args.clipId);
@@ -130,7 +168,15 @@ export async function cutSilenceTool(args: Record<string, unknown>, host: Editin
   if ("error" in res) return { ok: false, summary: "Silence cut failed", error: { code: "INVALID_EDIT", message: res.error } };
   if (!res.regions.length) return { ok: true, summary: "No silent pauses found with these settings", data: { removed: 0, totalSec: 0 } };
 
+  const trackId = findClip(host.getProject(), clipId)?.track.id;
+  const captionIds = trackId ? captionsOfTrack(host.getProject(), trackId) : [];
   const error = await applySilenceCuts(host, clipId, res.regions);
   if (error) return { ok: false, summary: "Silence cut failed", error: { code: "INVALID_EDIT", message: error } };
-  return { ok: true, summary: `Removed ${res.regions.length} silent pauses (${total(res.regions)}s)`, data: { removed: res.regions.length, totalSec: total(res.regions), settings: opts } };
+  const captions = await moveCaptions(host, captionIds, res.regions);
+  if ("error" in captions) return { ok: false, summary: "Silence cut failed", error: { code: "INVALID_EDIT", message: captions.error } };
+  return {
+    ok: true,
+    summary: `Removed ${res.regions.length} silent pauses (${total(res.regions)}s)${captions.moved ? `; ${captions.moved} caption lines moved with the cut` : ""}`,
+    data: { removed: res.regions.length, totalSec: total(res.regions), captionLinesMoved: captions.moved, settings: opts },
+  };
 }

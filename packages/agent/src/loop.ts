@@ -38,6 +38,13 @@ export interface RunTurnInput {
    * after "approve_for_turn".
    */
   readonly requiresConfirmation?: (name: string) => boolean;
+  /**
+   * Atomic turns only. By default any failed or user-rejected call discards the
+   * whole turn. Return true to keep going instead: the model sees the failure
+   * and may correct it or carry on. The caller vouches that the call left the
+   * draft unchanged, so the turn can still commit as one consistent edit.
+   */
+  readonly continueAfterFailure?: (call: ToolCall, result: ToolResult) => boolean;
   readonly atomic?: boolean;
   readonly signal?: AbortSignal;
 }
@@ -251,7 +258,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
               content: JSON.stringify(rejected),
               isError: true,
             });
-            if (input.atomic) throw new Error("The edit was rejected; pending changes were discarded.");
+            if (input.atomic && input.continueAfterFailure?.(call, rejected) !== true) throw new Error("The edit was rejected; pending changes were discarded.");
             continue;
           }
         }
@@ -275,7 +282,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           pendingCorrections.set(call.id, { call, result, previousCallIds: correction ? [...correction.previousCallIds, correction.call.id] : [] });
         }
         emit({ type: "tool_result", call, result });
-        if (input.atomic && !result.ok && !pendingCorrections.has(call.id)) throw new Error(`${call.name}: ${result.error?.message ?? result.summary}. Pending changes were discarded.`);
+        if (input.atomic && !result.ok && !pendingCorrections.has(call.id) && input.continueAfterFailure?.(call, result) !== true) throw new Error(`${call.name}: ${result.error?.message ?? result.summary}. Pending changes were discarded.`);
         if (input.atomic && result.ok && correction && typeof retryOf === "string") {
           pendingCorrections.delete(retryOf);
           emit({ type: "tool_recovered", callIds: [...correction.previousCallIds, correction.call.id], repairedBy: call.id });

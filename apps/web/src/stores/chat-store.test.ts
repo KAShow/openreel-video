@@ -54,6 +54,9 @@ vi.mock("../hawsh/ai", () => ({
 }));
 vi.mock("../services/agent/editing-session", () => ({ EditingSession: class { committed = true; } }));
 vi.mock("../services/agent/editing-tools", () => ({ editingToolDefs: () => [], editingToolReadOnly: () => false, editingToolNeedsConfirm: (name: string) => name === "transcribe_clip", executeEditingTool: vi.fn(), EDITING_SYSTEM: "system" }));
+vi.mock("../hawsh/assistant-prompt", () => ({ assistantSystem: (project: { id: string }, ui: { playheadSec?: number; selectedIds?: string[] }) => `system for ${project.id} at ${ui.playheadSec}s, selected: ${ui.selectedIds?.join(",")}` }));
+vi.mock("./timeline-store", () => ({ useTimelineStore: { getState: () => ({ playheadPosition: 4 }) } }));
+vi.mock("./ui-store", () => ({ useUIStore: { getState: () => ({ selectedItems: [{ type: "clip", id: "clip-1" }] }) } }));
 vi.mock("../hawsh/transcribe-tool", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../hawsh/transcribe-tool")>()),
   transcribePointsCharged: () => h.transcribePoints,
@@ -71,6 +74,7 @@ vi.mock("./project-store", () => ({
     getState: () => ({
       hasOpenProject: h.projectState.hasOpenProject,
       project: { id: h.projectState.projectId },
+      getFullProject: () => ({ id: h.projectState.projectId, name: "p", timeline: { tracks: [] }, mediaLibrary: { items: [] } }),
       undo: h.undo,
       actionExecutor: {
         getHistory: () => ({ getUndoStackSize: () => h.undoStackSize }),
@@ -243,6 +247,74 @@ describe("chat-store", () => {
       role: "assistant",
       content: "Done!",
       toolUses: [],
+    });
+  });
+
+  describe("what the model is given", () => {
+    const committed = (text: string) => impl(async ({ messages }) => ({
+      text,
+      // The loop's own transcript, with tool chatter the next request must not carry.
+      messages: [...messages, { role: "assistant", content: "", toolUses: [{ id: "t1", name: "list_clips", input: {} }] }, { role: "tool", results: [{ toolUseId: "t1", content: "{\"clips\":[\"stale-id\"]}", isError: false }] }, { role: "assistant", content: text, toolUses: [] }],
+      toolCalls: 1, stoppedReason: "end_turn", committed: true,
+    }));
+
+    it("sends the project as it is now, the selection, and the limits that keep a turn alive", async () => {
+      h.runTurn.mockImplementation(committed("تم"));
+      await store().send("قص البداية");
+      const input = h.runTurn.mock.calls[0][0] as RunTurnInput;
+      expect(input.system).toBe("system for project-a at 4s, selected: clip-1");
+      expect(input.limits).toEqual({ maxSteps: 16 });
+      expect(input.atomic).toBe(true);
+      // A rejected confirmation skips the step instead of discarding the turn.
+      expect(input.continueAfterFailure?.({ id: "c", name: "transcribe_clip", args: {} }, { ok: false, summary: "Rejected by user", error: { code: "REJECTED", message: "User rejected this action" } })).toBe(true);
+      expect(input.continueAfterFailure?.({ id: "c", name: "trim_clip", args: {} }, { ok: false, summary: "failed", error: { code: "INVALID_EDIT", message: "changed the draft" } })).toBe(false);
+    });
+
+    it("carries the conversation as words only, without old tool calls and results", async () => {
+      h.runTurn.mockImplementation(committed("قصصت ثانيتين من البداية."));
+      await store().send("قص البداية");
+      await store().send("وأضف عنواناً");
+      const second = h.runTurn.mock.calls[1][0] as RunTurnInput;
+      expect(second.messages).toEqual([
+        { role: "user", content: "قص البداية" },
+        { role: "assistant", content: "قصصت ثانيتين من البداية.", toolUses: [] },
+        { role: "user", content: "وأضف عنواناً" },
+      ]);
+      expect(JSON.stringify(store().conversation)).not.toContain("stale-id");
+    });
+
+    it("remembers the conversation after a turn that failed", async () => {
+      h.runTurn.mockImplementationOnce(committed("قصصت ثانيتين من البداية."));
+      await store().send("قص البداية");
+      h.runTurn.mockImplementationOnce(impl(async () => ({ text: "", messages: [], toolCalls: 1, stoppedReason: "error", committed: false })));
+      await store().send("أضف انتقالاً");
+      h.runTurn.mockImplementationOnce(committed("تم"));
+      await store().send("حاول مرة أخرى");
+      const third = h.runTurn.mock.calls[2][0] as RunTurnInput;
+      expect(third.messages.map((m) => [m.role, m.role === "tool" ? "" : m.content])).toEqual([
+        ["user", "قص البداية"],
+        ["assistant", "قصصت ثانيتين من البداية."],
+        ["user", "أضف انتقالاً"],
+        ["assistant", "تعذّر إكمال الطلب، ولم يُطبَّق أي تعديل."],
+        ["user", "حاول مرة أخرى"],
+      ]);
+    });
+
+    it("remembers the conversation after a request the server refused", async () => {
+      h.runTurn.mockImplementationOnce(committed("تم القص."));
+      await store().send("قص البداية");
+      h.runTurn.mockImplementationOnce(async () => { throw new Error("رصيد النقاط لا يكفي"); });
+      await store().send("أضف عنواناً");
+      expect(store().conversation.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+    });
+
+    it("keeps only the latest messages, starting from a user message", async () => {
+      h.runTurn.mockImplementation(committed("تم"));
+      for (let i = 0; i < 12; i++) await store().send(`طلب ${i}`);
+      const last = h.runTurn.mock.calls.at(-1)![0] as RunTurnInput;
+      expect(last.messages).toHaveLength(17); // 16 earlier messages and the new request
+      expect(last.messages[0]).toEqual({ role: "user", content: "طلب 3" });
+      expect(last.messages.at(-1)).toEqual({ role: "user", content: "طلب 11" });
     });
   });
 
