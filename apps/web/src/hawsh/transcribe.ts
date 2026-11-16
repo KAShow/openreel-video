@@ -12,6 +12,7 @@ import { loadAudioBuffer } from "../utils/load-audio-buffer";
 import { audioBufferToWhisperSamples } from "../utils/whisper-audio";
 import { HAWSH_REF_BUCKET, HAWSH_SUPABASE_URL } from "./config";
 import { hawshClient, useHawshStore } from "./session";
+import { msg } from "./i18n/messages";
 
 export const HAWSH_TRANSCRIBE_URL = `${HAWSH_SUPABASE_URL}/functions/v1/editor-transcribe`;
 export const TRANSCRIBE_PRICE_KEY = "editor_transcribe_per_min";
@@ -145,6 +146,17 @@ export async function transcribeClip(
   const { wav } = await clipAudioWav(clip, media, onProgress);
   onProgress?.(0.4, "جارٍ التفريغ في عيون المخرج…");
   const { words, points, minutes } = await transcribeWav(wav, language);
-  if (!words.length) throw new Error("لم يُكتشف كلام في هذا المقطع.");
+  if (!words.length) throw new NoSpeechError(points, minutes);
   return { segments: wordsToCaptions(words, clip, maxWords), points, minutes, words };
+}
+
+/**
+ * The clip had no speech. The server listened to it, so the points are already spent: the message says
+ * how many, and callers that keep a running total (transcribe-tool.ts) can count them.
+ */
+export class NoSpeechError extends Error {
+  constructor(readonly points: number, readonly minutes: number) {
+    super(points > 0 ? msg("transcribe.noSpeechCharged", { points }) : msg("transcribe.noSpeech"));
+    this.name = "NoSpeechError";
+  }
 }
