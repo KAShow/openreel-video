@@ -5,6 +5,7 @@ import { ChevronRight, Loader2, Check, X, Ban, Wrench } from "@/icons/lucide-com
 import type { ToolCallView } from "../../../stores/chat-store";
 import { toolLabel } from "./tool-labels";
 import { msg } from "../../../hawsh/i18n/messages";
+import { SIMPLE_EDITOR } from "../../../hawsh/simple";
 
 const STATUS_META: Record<
   ToolCallView["status"],
@@ -141,7 +142,8 @@ export function ToolCallCard({ call }: { call: ToolCallView }): JSX.Element {
         </div>
       )}
 
-      {!open && Object.keys(call.args ?? {}).length > 0 && (
+      {/* Hawsh simple editor: raw arguments stay inside the expanded details only. */}
+      {!SIMPLE_EDITOR && !open && Object.keys(call.args ?? {}).length > 0 && (
         <div dir="ltr" className="truncate px-2 pb-1.5 text-start font-mono text-[10px] text-fg-muted">
           {previewArgs(call.args)}
         </div>
