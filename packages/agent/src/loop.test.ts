@@ -148,6 +148,37 @@ describe("runTurn", () => {
     expect(result.committed).toBe(true);
   });
 
+  it("gates host tools named by requiresConfirmation, except in dry-run or after approve_for_turn", async () => {
+    const script = (): LLMResponse[] => [
+      { text: "", stopReason: "tool_use", toolUses: [{ id: "p1", name: "paid_tool", input: {} }, { id: "p2", name: "paid_tool", input: {} }, { id: "f1", name: "free_tool", input: {} }] },
+      { text: "Done.", stopReason: "end_turn", toolUses: [] },
+    ];
+    const run = async (options: { dryRun?: boolean; decision: "approve" | "approve_for_turn" | "reject"; hook?: boolean }) => {
+      const execute = vi.fn(async (_name: string) => ({ ok: true as const, summary: "ran" }));
+      const confirmGate = vi.fn((_call: { name: string }) => options.decision);
+      await runTurn({
+        host: new HeadlessHost(makeProjectWithClip()),
+        llm: new MockLLMClient(script()),
+        tools,
+        messages: userMsg("go"),
+        execute,
+        readOnly: () => false,
+        dryRun: options.dryRun,
+        confirmGate,
+        requiresConfirmation: options.hook === false ? undefined : (name) => name === "paid_tool",
+      });
+      return { gated: confirmGate.mock.calls.map(([call]) => call.name), ran: execute.mock.calls.map(([name]) => name) };
+    };
+
+    expect(await run({ decision: "approve" })).toEqual({ gated: ["paid_tool", "paid_tool"], ran: ["paid_tool", "paid_tool", "free_tool"] });
+    expect(await run({ decision: "reject" })).toEqual({ gated: ["paid_tool", "paid_tool"], ran: ["free_tool"] });
+    expect(await run({ decision: "approve_for_turn" })).toEqual({ gated: ["paid_tool"], ran: ["paid_tool", "paid_tool", "free_tool"] });
+    // Dry-run never asks and never executes a non-read-only tool.
+    expect(await run({ decision: "approve", dryRun: true })).toEqual({ gated: [], ran: [] });
+    // Without the hook the behaviour is unchanged: host tools run without asking.
+    expect(await run({ decision: "reject", hook: false })).toEqual({ gated: [], ran: ["paid_tool", "paid_tool", "free_tool"] });
+  });
+
   it("performs >=5 cross-domain edits in one turn and reverts them atomically on error", async () => {
     const host = new HeadlessHost(makeProjectWithClip());
     let call = 0;

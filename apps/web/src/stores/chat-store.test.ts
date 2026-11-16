@@ -17,6 +17,7 @@ const h = vi.hoisted(() => ({
   undo: vi.fn(async () => ({ success: true })),
   projectState: { hasOpenProject: true, projectId: "project-a" },
   undoStackSize: 0,
+  transcribePoints: 0,
   settings: {
     defaultLlmProvider: "openai-compatible" as string | null,
     llmBaseUrl: "https://gateway.example/v1",
@@ -52,8 +53,12 @@ vi.mock("../hawsh/ai", () => ({
   makeHawshAIClient: h.makeHawshClient,
 }));
 vi.mock("../services/agent/editing-session", () => ({ EditingSession: class { committed = true; } }));
-vi.mock("../services/agent/editing-tools", () => ({ editingToolDefs: () => [], editingToolReadOnly: () => false, executeEditingTool: vi.fn(), EDITING_SYSTEM: "system" }));
-vi.mock("./ai-connection-store", () => ({ useAIConnectionStore: { getState: () => h.connection } }));
+vi.mock("../services/agent/editing-tools", () => ({ editingToolDefs: () => [], editingToolReadOnly: () => false, editingToolNeedsConfirm: (name: string) => name === "transcribe_clip", executeEditingTool: vi.fn(), EDITING_SYSTEM: "system" }));
+vi.mock("../hawsh/transcribe-tool", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../hawsh/transcribe-tool")>()),
+  transcribePointsCharged: () => h.transcribePoints,
+}));
+vi.mock("./ai-connection-store",() => ({ useAIConnectionStore: { getState: () => h.connection } }));
 
 vi.mock("./settings-store", () => ({
   useSettingsStore: {
@@ -521,6 +526,53 @@ describe("chat-store", () => {
     expect(decision).toBe("approve");
     expect(store().status).toBe("idle");
     expect(store().pendingConfirm).toBeNull();
+  });
+
+  it("routes paid transcription through the confirm card with a points note", async () => {
+    let decision: string | undefined;
+    let needsConfirm: boolean | undefined;
+    h.runTurn.mockImplementation(impl(async ({ confirmGate, requiresConfirmation }) => {
+      needsConfirm = requiresConfirmation?.("transcribe_clip");
+      decision = await confirmGate!({ id: "t1", name: "transcribe_clip", args: { clipId: "c1" } });
+      return { text: "ok", messages: [], toolCalls: 1, stoppedReason: "end_turn", committed: true };
+    }));
+    const pending = store().send("ضع كابشن للفيديو");
+    await flush();
+    expect(needsConfirm).toBe(true);
+    expect(store().status).toBe("awaiting_confirm");
+    expect(store().pendingConfirm?.note).toContain("نقاط عيون المخرج");
+    store().resolveConfirm("approve");
+    await pending;
+    expect(decision).toBe("approve");
+  });
+
+  it("tells the user when a discarded turn already spent transcription points", async () => {
+    h.transcribePoints = 5; // spent in earlier turns: not this turn's
+    h.runTurn.mockImplementation(impl(async ({ onEvent }) => {
+      const call = { id: "t1", name: "transcribe_clip", args: { clipId: "c1" } };
+      onEvent?.({ type: "tool_call", call });
+      h.transcribePoints += 2; // the server charged, then the commit failed
+      onEvent?.({ type: "error", error: { code: "LOOP_ERROR", message: "The project changed while the AI was working." } });
+      return { text: "", messages: [], toolCalls: 1, stoppedReason: "error", committed: false };
+    }));
+    await store().send("ضع كابشن للفيديو");
+    expect(store().messages.at(-1)?.notice).toContain("خُصم 2 نقطة");
+    expect(store().messages.at(-1)?.text).toContain("ولم يُطبَّق أي تعديل");
+
+    // A discarded turn that spent nothing gets no notice.
+    h.runTurn.mockImplementation(impl(async () => ({ text: "", messages: [], toolCalls: 0, stoppedReason: "error", committed: false })));
+    await store().send("مرة أخرى");
+    expect(store().messages.at(-1)?.notice).toBeUndefined();
+  });
+
+  it("also tells the user when the turn throws after transcription points were spent", async () => {
+    h.transcribePoints = 0;
+    h.runTurn.mockImplementation(impl(async () => {
+      h.transcribePoints += 3; // the server charged, then the loop threw
+      throw new Error("boom");
+    }));
+    await store().send("ضع كابشن للفيديو");
+    expect(store().messages.at(-1)?.notice).toContain("خُصم 3 نقطة");
   });
 
   it("stop() rejects a pending confirmation", async () => {

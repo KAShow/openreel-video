@@ -131,17 +131,20 @@ export async function transcribeWav(wav: Blob, language: string): Promise<{ word
   return { words: Array.isArray(body.words) ? body.words : [], points: Number(body.points ?? 0), minutes: Number(body.minutes ?? 0) };
 }
 
-/** Full path for one clip: audio → server → caption lines on the timeline. */
+/**
+ * Full path for one clip: audio → server → caption lines on the timeline. `words` (seconds from the
+ * clip's in-point) are returned too, so a caller can rebuild the lines later without paying again.
+ */
 export async function transcribeClip(
   clip: Clip,
   media: MediaItem,
   language: string,
   maxWords: number,
   onProgress?: (fraction: number, message: string) => void,
-): Promise<{ segments: TranscriptionSegment[]; points: number; minutes: number }> {
+): Promise<{ segments: TranscriptionSegment[]; points: number; minutes: number; words: Word[] }> {
   const { wav } = await clipAudioWav(clip, media, onProgress);
   onProgress?.(0.4, "جارٍ التفريغ في عيون المخرج…");
   const { words, points, minutes } = await transcribeWav(wav, language);
   if (!words.length) throw new Error("لم يُكتشف كلام في هذا المقطع.");
-  return { segments: wordsToCaptions(words, clip, maxWords), points, minutes };
+  return { segments: wordsToCaptions(words, clip, maxWords), points, minutes, words };
 }

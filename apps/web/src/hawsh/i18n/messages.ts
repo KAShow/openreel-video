@@ -80,6 +80,12 @@ export const MESSAGES = {
   "chat.tool.aria": "{label} — {status}",
   "chat.confirm.body": "يريد المساعد تنفيذ «{label}»، وقد يغيّر مشروعك أو يستهلك رصيداً.",
 
+  // ── AI assistant: speech-to-captions tool (charged in points) ─────────────
+  "chat.transcribe.costEstimate": "تفريغ الكلام يُخصم من نقاط عيون المخرج: نحو {points} نقطة لهذا المقطع ({price} نقطة لكل دقيقة صوت بدأت). تُخصم النقاط بمجرد نجاح التفريغ.",
+  "chat.transcribe.costGeneric": "تفريغ الكلام يُخصم من نقاط عيون المخرج عن كل دقيقة صوت بدأت.",
+  "chat.transcribe.costReuse": "سبق تفريغ هذا المقطع في هذه الجلسة، فسيُستخدم النص نفسه دون خصم نقاط جديدة.",
+  "chat.transcribe.chargedNotApplied": "خُصم {points} نقطة لتفريغ الكلام، لكن الطلب لم يكتمل فلم تُضف الترجمة. اطلبها مرة أخرى للمقطع نفسه وسيُستخدم التفريغ ذاته دون خصم جديد ما دامت الصفحة مفتوحة.",
+
   // ── AI assistant: history and code blocks ─────────────────────────────────
   "chat.history.delete": "حذف {title}",
   "chat.history.requests.one": "طلب واحد",

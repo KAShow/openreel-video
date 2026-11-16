@@ -9,6 +9,7 @@ import { msg } from "../../../hawsh/i18n/messages";
 
 export function InlineConfirmCard({ call }: { call: ToolCall }): JSX.Element {
   const resolveConfirm = useChatStore((s) => s.resolveConfirm);
+  const note = useChatStore((s) => s.pendingConfirm?.note);
   const argKeys = Object.keys(call.args ?? {});
   const label = toolLabel(call.name) ?? call.name;
 
@@ -21,6 +22,11 @@ export function InlineConfirmCard({ call }: { call: ToolCall }): JSX.Element {
       <Text type="supporting" color="secondary" className="mb-2 text-fg-2">
         {msg("chat.confirm.body", { label })}
       </Text>
+      {note && (
+        <Text type="supporting" className="mb-2 block font-medium text-fg">
+          {note}
+        </Text>
+      )}
       {argKeys.length > 0 && (
         <pre dir="ltr" className="mb-2 max-h-32 text-start overflow-auto whitespace-pre-wrap break-words rounded bg-bg-2 p-1.5 font-mono text-[10px] text-fg-2">
           {JSON.stringify(call.args, null, 2)}
