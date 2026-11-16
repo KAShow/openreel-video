@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { msg } from "../../../hawsh/i18n/messages";
 import { createPortableEdit, parsePortableEdit, materializePortableEdit, parseEditPreset, type EditPreset } from "@openreel/core/editing/portable-project";
 import { useProjectStore } from "../../../stores/project-store";
 import { useUIStore } from "../../../stores/ui-store";
@@ -28,7 +29,7 @@ export function EditSharingPanel({ disabled }: { disabled: boolean }) {
   const busy = disabled || working;
   const perform = async (fn: () => Promise<void> | void) => {
     setWorking(true); setError(""); setMessage("");
-    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : "تعذّرت مشاركة التعديل"); } finally { setWorking(false); }
+    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : msg("share.error.generic")); } finally { setWorking(false); }
   };
   const importEdit = () => perform(async () => {
     const doc = parsePortableEdit(json);
@@ -36,20 +37,20 @@ export function EditSharingPanel({ disabled }: { disabled: boolean }) {
       const session = new EditingSession(); const txn = session.beginTransaction();
       const restored = materializePortableEdit(doc, session.getProject());
       session.replaceDraft(restored.project);
-      await session.commitTransaction(txn, "استيراد تعديل محمول");
+      await session.commitTransaction(txn, msg("share.txn.import"));
       useChatStore.getState().reset();
-      setMessage(restored.missing.length ? `تم استيراد التعديل. أعد ربط ${restored.missing.length} ملفات وسائط مفقودة أدناه.` : "تم استيراد التعديل كخطوة تراجع واحدة. كل مراجع الوسائط مرتبطة.");
+      setMessage(restored.missing.length ? msg("share.done.importMissing", { count: restored.missing.length }) : msg("share.done.import"));
     });
   });
   const exportEdit = () => perform(() => {
     const text = JSON.stringify(createPortableEdit(useProjectStore.getState().getFullProject()), null, 2);
-    setJSON(text); downloadJSON(text, "openreel-edit.json"); setMessage("تم تصدير ملف التعديل. شارك ملفات الوسائط الأصلية بشكل منفصل.");
+    setJSON(text); downloadJSON(text, "openreel-edit.json"); setMessage(msg("share.done.exportEdit"));
   });
   const exportPreset = () => perform(() => {
-    const clip = clips.find((c) => c.id === targetId); if (!clip) throw new Error("اختر مقطعاً أولاً");
+    const clip = clips.find((c) => c.id === targetId); if (!clip) throw new Error(msg("share.error.chooseClip"));
     const transition = project.timeline.tracks.flatMap((t) => t.transitions).find((t) => t.clipAId === clip.id);
     const preset = { format: "openreel-preset", version: 1, name: "Shared look & transition", effects: clip.effects, ...(transition ? { transition: { type: transition.type, duration: transition.duration, params: transition.params } } : {}) };
-    const text = JSON.stringify(preset, null, 2); parseEditPreset(text); setJSON(text); downloadJSON(text, "openreel-preset.json"); setMessage("تم تصدير الإعداد الجاهز. عند تطبيقه تُنشأ معرّفات جديدة للمؤثرات والانتقالات.");
+    const text = JSON.stringify(preset, null, 2); parseEditPreset(text); setJSON(text); downloadJSON(text, "openreel-preset.json"); setMessage(msg("share.done.exportPreset"));
   });
   const applyPreset = () => perform(async () => {
     const preset: EditPreset = parseEditPreset(json);
@@ -60,29 +61,29 @@ export function EditSharingPanel({ disabled }: { disabled: boolean }) {
       const nextClipId = ordered[ordered.findIndex((c) => c.id === targetId) + 1]?.id;
       const result = await executeEditingTool("apply_edit_preset", { clipId: targetId, preset, ...(nextClipId ? { nextClipId } : {}) }, session);
       if (!result.ok) throw new Error(result.error?.message ?? result.summary);
-      await session.commitTransaction(txn, "تطبيق إعداد مشترك");
-      setMessage(`تم تطبيق الإعداد على المقطع. ${result.summary}`);
+      await session.commitTransaction(txn, msg("share.txn.preset"));
+      setMessage(msg("share.done.applyPreset", { summary: result.summary }));
     });
   });
   return (
     <details className="border-b border-border px-3 py-2 text-xs">
       <summary className="cursor-pointer text-fg-2">Edit JSON &amp; reusable presets</summary>
       <div className="mt-3 space-y-2">
-        <p className="text-[11px] leading-relaxed text-fg-muted">التعديل المحمول (الإصدار 2) يشارك الخط الزمني ومراجع الوسائط المحلية. الاستيراد يستبدل التعديل الحالي بخطوة تراجع واحدة. الملفات تحتوي بيانات فقط؛ وتُرفض السكربتات والروابط وتعليمات الوكيل.</p>
+        <p className="text-[11px] leading-relaxed text-fg-muted">{msg("share.help")}</p>
         <div className="flex gap-2">
           <button className={control} disabled={busy} onClick={exportEdit}>Export edit JSON</button>
           <button className={control} disabled={busy} onClick={() => fileInput.current?.click()}>Read JSON file</button>
-          <input ref={fileInput} aria-label="Read edit or preset file" type="file" accept=".json,application/json" className="hidden" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void perform(async () => { if (file.size > 5_000_000) throw new Error("ملف JSON يتجاوز 5 ميغابايت"); setJSON(await file.text()); }); e.target.value = ""; }} />
+          <input ref={fileInput} aria-label="Read edit or preset file" type="file" accept=".json,application/json" className="hidden" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void perform(async () => { if (file.size > 5_000_000) throw new Error(msg("share.error.tooLarge")); setJSON(await file.text()); }); e.target.value = ""; }} />
         </div>
         <label className="block text-fg-2">Edit or preset JSON<textarea dir="ltr" aria-label="Edit or preset JSON" className="mt-1 h-28 w-full resize-y rounded-md border border-border bg-bg-2 p-2 font-mono text-[10px] select-text focus:outline-none focus:ring-1 focus:ring-accent" disabled={busy} value={json} onChange={(e) => setJSON(e.target.value)} spellCheck={false} placeholder="Paste validated edit or preset JSON here" /></label>
         <button className={control} disabled={busy || !json.trim()} onClick={() => void importEdit()}>Import edit JSON</button>
         <label className="block text-fg-2">Preset target<select aria-label="Preset target clip" className={`mt-1 w-full ${control}`} value={targetId} onChange={(e) => setTarget(e.target.value)} disabled={busy}>
-          <option value="">Choose a clip</option>{clips.map((clip) => <option key={clip.id} value={clip.id}>{project.mediaLibrary.items.find((m) => m.id === clip.mediaId)?.name ?? "مقطع"} · {clip.startTime.toFixed(1)}s · {clip.id.slice(0, 8)}</option>)}
+          <option value="">Choose a clip</option>{clips.map((clip) => <option key={clip.id} value={clip.id}>{project.mediaLibrary.items.find((m) => m.id === clip.mediaId)?.name ?? msg("share.clipFallback")} · {clip.startTime.toFixed(1)}s · {clip.id.slice(0, 8)}</option>)}
         </select></label>
         <div className="flex gap-2"><button className={control} disabled={busy || !targetId} onClick={exportPreset}>Export preset</button><button className={control} disabled={busy || !targetId || !json.trim()} onClick={() => void applyPreset()}>Apply preset JSON</button></div>
-        <div className="flex gap-2"><button className={control} disabled={busy || !useProjectStore.getState().canUndo()} onClick={() => void perform(async () => { await useProjectStore.getState().undo(); setMessage("تم التراجع عن التعديل"); })}>Undo edit</button><button className={control} disabled={busy || !useProjectStore.getState().canRedo()} onClick={() => void perform(async () => { await useProjectStore.getState().redo(); setMessage("تمت إعادة التعديل"); })}>Redo edit</button></div>
-        {project.mediaLibrary.items.filter((m) => m.isPlaceholder).map((media) => <label key={media.id} className="block rounded border border-border p-2 text-[11px]">إعادة ربط {media.name}<input aria-label={`إعادة ربط ${media.name}`} className="mt-1 w-full" type="file" accept={`${media.type}/*`} disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void perform(async () => { if (!file.type.startsWith(media.type + "/")) throw new Error("اختر ملفاً من نوع الوسائط نفسه"); await runExclusive(async () => { const session = new EditingSession(); const txn = session.beginTransaction(); await session.relinkMedia(media.id, file); await session.commitTransaction(txn, "إعادة ربط وسائط مشتركة"); }); setMessage(`أُعيد ربط ${media.name}. حُفظت معرّفات العناصر.`); }); }} /></label>)}
-        {working && <p role="status" className="text-fg-muted">جارٍ التحقق والتطبيق…</p>}
+        <div className="flex gap-2"><button className={control} disabled={busy || !useProjectStore.getState().canUndo()} onClick={() => void perform(async () => { await useProjectStore.getState().undo(); setMessage(msg("share.done.undo")); })}>Undo edit</button><button className={control} disabled={busy || !useProjectStore.getState().canRedo()} onClick={() => void perform(async () => { await useProjectStore.getState().redo(); setMessage(msg("share.done.redo")); })}>Redo edit</button></div>
+        {project.mediaLibrary.items.filter((m) => m.isPlaceholder).map((media) => <label key={media.id} className="block rounded border border-border p-2 text-[11px]">{msg("share.relink", { name: media.name })}<input aria-label={msg("share.relink", { name: media.name })} className="mt-1 w-full" type="file" accept={`${media.type}/*`} disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void perform(async () => { if (!file.type.startsWith(media.type + "/")) throw new Error(msg("share.error.mediaType")); await runExclusive(async () => { const session = new EditingSession(); const txn = session.beginTransaction(); await session.relinkMedia(media.id, file); await session.commitTransaction(txn, msg("share.txn.relink")); }); setMessage(msg("share.done.relinked", { name: media.name })); }); }} /></label>)}
+        {working && <p role="status" className="text-fg-muted">{msg("share.working")}</p>}
         {message && <p role="status" className="text-[11px] text-status-success">{message}</p>}
         {error && <p role="alert" className="break-words text-[11px] text-status-error">{error}</p>}
       </div>

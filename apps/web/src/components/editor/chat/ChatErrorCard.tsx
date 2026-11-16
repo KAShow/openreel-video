@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { ToolcraftButton as Button } from "@openreel/ui";
 import { ToolcraftIconButton as IconButton } from "@openreel/ui";
 import { CircleAlert, X } from "@/icons/lucide-compat";
+import { msg } from "../../../hawsh/i18n/messages";
 
 export type ChatErrorAction = "ai-editor" | "new-chat" | null;
 
@@ -35,7 +36,7 @@ function extractUpstreamMessage(raw: string): string | null {
 }
 
 export function formatChatError(rawError: string): ChatErrorPresentation {
-  const raw = rawError.trim() || "تعذّر تنفيذ طلب المساعد.";
+  const raw = rawError.trim() || msg("chat.error.fallback");
   const upstream = extractUpstreamMessage(raw);
   const status = Number(raw.match(/\b([45]\d{2})\b/)?.[1] ?? 0);
   const searchable = `${raw} ${upstream ?? ""}`.toLowerCase();
@@ -49,19 +50,19 @@ export function formatChatError(rawError: string): ChatErrorPresentation {
     )
   ) {
     return {
-      title: "فشلت المصادقة",
+      title: msg("chat.errorCard.auth.title"),
       message:
         upstream ??
-        "رفضت الخدمة مفتاح الواجهة. تحقق من مفتاح الجلسة وحاول مرة أخرى.",
+        msg("chat.errorCard.auth.message"),
       action: "ai-editor",
-      actionLabel: "التحقق من المفتاح",
+      actionLabel: msg("chat.errorCard.auth.action"),
       details,
     };
   }
 
   if (/انتهى الدخول/.test(searchable)) {
     return {
-      title: "انتهت الجلسة",
+      title: msg("chat.errorCard.session.title"),
       message: upstream ?? raw,
       action: null,
       details,
@@ -70,10 +71,10 @@ export function formatChatError(rawError: string): ChatErrorPresentation {
 
   if (status === 429 || /rate limit|too many requests|quota/.test(searchable)) {
     return {
-      title: "بلغت حدّ الطلبات",
+      title: msg("chat.errorCard.rate.title"),
       message:
         upstream ??
-        "الخدمة تتلقى طلبات كثيرة. انتظر قليلاً ثم حاول مرة أخرى.",
+        msg("chat.errorCard.rate.message"),
       action: null,
       details,
     };
@@ -85,11 +86,11 @@ export function formatChatError(rawError: string): ChatErrorPresentation {
     )
   ) {
     return {
-      title: "تعذّر الوصول إلى الخدمة",
+      title: msg("chat.errorCard.network.title"),
       message:
-        "تحقق من عنوان الخدمة وتأكد أنها تعمل. وفي المتصفح يجب أن تسمح الخدمة بطلبات CORS من OpenReel.",
+        msg("chat.errorCard.network.message"),
       action: "ai-editor",
-      actionLabel: "التحقق من العنوان",
+      actionLabel: msg("chat.errorCard.endpoint.action"),
       details: raw,
     };
   }
@@ -100,24 +101,24 @@ export function formatChatError(rawError: string): ChatErrorPresentation {
     )
   ) {
     return {
-      title: "المحادثة طويلة جداً",
+      title: msg("chat.errorCard.context.title"),
       message:
         upstream ??
-        "لا يتسع النموذج لكامل المحادثة. ابدأ محادثة جديدة وأكمل فيها.",
+        msg("chat.errorCard.context.message"),
       action: "new-chat",
-      actionLabel: "بدء محادثة جديدة",
+      actionLabel: msg("chat.errorCard.context.action"),
       details,
     };
   }
 
   if (status === 404 || /model.+not found|unknown model|does not exist/.test(searchable)) {
     return {
-      title: "النموذج أو المسار غير موجود",
+      title: msg("chat.errorCard.notFound.title"),
       message:
         upstream ??
-        "تحقق أن العنوان الأساسي ومعرّف النموذج يطابقان ما تقدمه الخدمة.",
+        msg("chat.errorCard.notFound.message"),
       action: "ai-editor",
-      actionLabel: "التحقق من العنوان",
+      actionLabel: msg("chat.errorCard.endpoint.action"),
       details,
     };
   }
@@ -129,16 +130,16 @@ export function formatChatError(rawError: string): ChatErrorPresentation {
   ) {
     const keyIssue = /secure storage|unlock|api key/.test(searchable);
     return {
-      title: "الإعداد مطلوب",
+      title: msg("chat.errorCard.setup.title"),
       message: upstream ?? raw,
       action: "ai-editor",
-      actionLabel: keyIssue ? "التحقق من المفتاح" : "فتح إعدادات المساعد",
+      actionLabel: keyIssue ? msg("chat.errorCard.auth.action") : msg("chat.errorCard.setup.settings"),
       details,
     };
   }
 
   return {
-    title: "تعذّر تنفيذ الطلب",
+    title: msg("chat.errorCard.generic.title"),
     message: upstream ?? raw,
     action: null,
     details,
@@ -176,7 +177,7 @@ export function ChatErrorCard({
           </div>
         </div>
         <IconButton
-          label="إغلاق الخطأ"
+          label={msg("chat.errorCard.dismiss")}
           icon={<X size={13} aria-hidden />}
           size="sm"
           variant="ghost"
@@ -188,7 +189,7 @@ export function ChatErrorCard({
       {presentation.details && (
         <details className="group mt-2 rounded-lg bg-bg-2/70 px-2.5 py-2">
           <summary className="cursor-pointer select-none text-[10px] font-medium text-fg-muted hover:text-fg-2">
-            تفاصيل تقنية
+            {msg("chat.errorCard.details")}
           </summary>
           <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-relaxed text-fg-muted">
             {presentation.details}
@@ -198,7 +199,7 @@ export function ChatErrorCard({
 
       {presentation.action && (
         <Button
-          label={presentation.actionLabel ?? "إصلاح المشكلة"}
+          label={presentation.actionLabel ?? msg("chat.errorCard.fix")}
           variant="secondary"
           size="sm"
           onClick={() => {

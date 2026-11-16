@@ -5,6 +5,7 @@ import { AlertTriangle } from "@/icons/lucide-compat";
 import type { ToolCall } from "@openreel/agent";
 import { useChatStore } from "../../../stores/chat-store";
 import { toolLabel } from "./tool-labels";
+import { msg } from "../../../hawsh/i18n/messages";
 
 export function InlineConfirmCard({ call }: { call: ToolCall }): JSX.Element {
   const resolveConfirm = useChatStore((s) => s.resolveConfirm);
@@ -18,8 +19,7 @@ export function InlineConfirmCard({ call }: { call: ToolCall }): JSX.Element {
         Confirm action
       </div>
       <Text type="supporting" color="secondary" className="mb-2 text-fg-2">
-        يريد المساعد تنفيذ «<span className="text-fg">{label}</span>»، وقد يغيّر
-        مشروعك أو يستهلك رصيداً.
+        {msg("chat.confirm.body", { label })}
       </Text>
       {argKeys.length > 0 && (
         <pre dir="ltr" className="mb-2 max-h-32 text-start overflow-auto whitespace-pre-wrap break-words rounded bg-bg-2 p-1.5 font-mono text-[10px] text-fg-2">

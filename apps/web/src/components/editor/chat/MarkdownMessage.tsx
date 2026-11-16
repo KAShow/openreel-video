@@ -3,6 +3,7 @@ import { isValidElement, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy } from "@/icons/lucide-compat";
+import { msg } from "../../../hawsh/i18n/messages";
 
 function nodeText(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node);
@@ -35,7 +36,7 @@ function CodeBlock({ children }: ComponentPropsWithoutRef<"pre">): JSX.Element {
       <button
         type="button"
         onClick={() => void copy()}
-        aria-label={copied ? "تم نسخ الكود" : "نسخ الكود"}
+        aria-label={msg(copied ? "chat.code.copied" : "chat.code.copy")}
         className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-md border border-border bg-bg-1/90 text-fg-muted opacity-0 shadow-sm transition hover:text-fg focus:opacity-100 group-hover/code:opacity-100"
       >
         {copied ? <Check size={11} /> : <Copy size={11} />}

@@ -4,6 +4,7 @@ import { ToolcraftButton as Button } from "@openreel/ui";
 import { ChevronRight, Loader2, Check, X, Ban, Wrench } from "@/icons/lucide-compat";
 import type { ToolCallView } from "../../../stores/chat-store";
 import { toolLabel } from "./tool-labels";
+import { msg } from "../../../hawsh/i18n/messages";
 
 const STATUS_META: Record<
   ToolCallView["status"],
@@ -12,32 +13,32 @@ const STATUS_META: Record<
   running: {
     icon: <Loader2 size={12} className="animate-spin" />,
     tint: "text-fg-2",
-    label: "جارٍ التنفيذ",
+    label: msg("chat.tool.status.running"),
   },
   done: {
     icon: <Check size={12} />,
     tint: "text-status-success",
-    label: "تم",
+    label: msg("chat.tool.status.done"),
   },
   retrying: {
     icon: <Wrench size={12} />,
     tint: "text-status-warning",
-    label: "جارٍ التصحيح",
+    label: msg("chat.tool.status.retrying"),
   },
   corrected: {
     icon: <Check size={12} />,
     tint: "text-fg-muted",
-    label: "صُحّح",
+    label: msg("chat.tool.status.corrected"),
   },
   error: {
     icon: <X size={12} />,
     tint: "text-status-error",
-    label: "فشل",
+    label: msg("chat.tool.status.error"),
   },
   rejected: {
     icon: <Ban size={12} />,
     tint: "text-fg-muted",
-    label: "تم التخطي",
+    label: msg("chat.tool.status.rejected"),
   },
 };
 
@@ -58,17 +59,17 @@ function previewArgs(args: Record<string, unknown>): string {
 function outcomeText(status: ToolCallView["status"], label: string): string {
   switch (status) {
     case "done":
-      return `تم تنفيذ «${label}» بنجاح.`;
+      return msg("chat.tool.outcome.done", { label });
     case "corrected":
-      return `أخطأ النموذج في «${label}» ثم صحّحه.`;
+      return msg("chat.tool.outcome.corrected", { label });
     case "retrying":
-      return `«${label}» يحتاج تصحيحاً، وسيحاول النموذج مرة أخرى.`;
+      return msg("chat.tool.outcome.retrying", { label });
     case "rejected":
-      return `تم تخطي «${label}» بقرارك.`;
+      return msg("chat.tool.outcome.rejected", { label });
     case "running":
-      return `جارٍ تنفيذ «${label}»…`;
+      return msg("chat.tool.outcome.running", { label });
     default:
-      return `تعذّر تنفيذ «${label}».`;
+      return msg("chat.tool.outcome.error", { label });
   }
 }
 
@@ -82,7 +83,7 @@ export function ToolCallCard({ call }: { call: ToolCallView }): JSX.Element {
   return (
     <div className="rounded-md border border-border bg-bg-1/60 text-[11px]">
       <Button
-        label={`${label} — ${meta.label}`}
+        label={msg("chat.tool.aria", { label, status: meta.label })}
         variant="ghost"
         isDisabled={!hasDetail}
         onClick={() => setOpen((v) => !v)}
@@ -109,7 +110,7 @@ export function ToolCallCard({ call }: { call: ToolCallView }): JSX.Element {
           {Object.keys(call.args ?? {}).length > 0 && (
             <div>
               <div className="mb-0.5 text-[9px] tracking-wide text-fg-muted">
-                المعطيات
+                {msg("chat.tool.args")}
               </div>
               <pre dir="ltr" className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-bg-2 p-1.5 text-start font-mono text-[10px] text-fg-2">
                 {JSON.stringify(call.args, null, 2)}
@@ -119,7 +120,7 @@ export function ToolCallCard({ call }: { call: ToolCallView }): JSX.Element {
           {call.result && (
             <div>
               <div className="mb-0.5 text-[9px] tracking-wide text-fg-muted">
-                النتيجة
+                {msg("chat.tool.result")}
               </div>
               <div
                 className={
