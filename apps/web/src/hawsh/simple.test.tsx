@@ -5,10 +5,10 @@ import { HIDDEN_AI_FEATURES, HIDDEN_ASSET_TABS, isHiddenSection } from "./simple
 
 describe("simple editor", () => {
   it("hides only the agreed inspector sections", () => {
-    for (const id of ["keyframes", "multicam", "motion-tracking", "masking", "transform-3d", "particle-effects", "text-behind-subject", "motion-path", "color-grading", "background-removal"]) {
+    for (const id of ["keyframes", "multicam", "motion-tracking", "masking", "transform-3d", "particle-effects", "motion-path", "background-removal"]) {
       expect(isHiddenSection(id)).toBe(true);
     }
-    for (const id of ["transform", "speed", "speed-curves", "auto-cut-silence", "auto-captions", "text-properties", undefined]) {
+    for (const id of ["text-behind-subject", "color-grading", "transform", "speed", "speed-curves", "auto-cut-silence", "auto-captions", "text-properties", undefined]) {
       expect(isHiddenSection(id)).toBe(false);
     }
   });
