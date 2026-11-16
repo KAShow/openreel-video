@@ -4,12 +4,13 @@ import { ToolcraftIconButton as IconButton } from "@openreel/ui";
 import { MessageSquareText, Plus, Trash2 } from "@/icons/lucide-compat";
 import { useChatHistoryStore } from "../../../stores/chat-history-store";
 import { useChatStore } from "../../../stores/chat-store";
+import { msg } from "../../../hawsh/i18n/messages";
 
 /** "طلب واحد" / "طلبان" / "5 طلبات" / "12 طلباً". */
 export function requestsLabel(n: number): string {
-  if (n === 1) return "طلب واحد";
-  if (n === 2) return "طلبان";
-  return `${n} ${n >= 3 && n <= 10 ? "طلبات" : "طلباً"}`;
+  if (n === 1) return msg("chat.history.requests.one");
+  if (n === 2) return msg("chat.history.requests.two");
+  return msg(n >= 3 && n <= 10 ? "chat.history.requests.few" : "chat.history.requests.many", { n });
 }
 
 function formatUpdatedAt(timestamp: number): string {
@@ -120,7 +121,7 @@ export function ChatHistoryPanel({
                     </span>
                   </button>
                   <IconButton
-                    label={`حذف ${conversation.title}`}
+                    label={msg("chat.history.delete", { title: conversation.title })}
                     icon={<Trash2 size={12} aria-hidden />}
                     size="sm"
                     variant="ghost"

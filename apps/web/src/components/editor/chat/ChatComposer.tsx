@@ -5,6 +5,7 @@ import { ToolcraftTextAreaControl } from "@openreel/ui";
 import { Send, Square } from "@/icons/lucide-compat";
 import { useChatStore } from "../../../stores/chat-store";
 import { AIPriceNote } from "../../../hawsh/AIPriceNote";
+import { msg } from "../../../hawsh/i18n/messages";
 
 export function ChatComposer(): JSX.Element {
   const status = useChatStore((s) => s.status);
@@ -67,7 +68,7 @@ export function ChatComposer(): JSX.Element {
         </div>
       </div>
       <div className="mt-1 px-1 text-[10px] text-fg-muted">
-        اضغط Enter للإرسال · Shift+Enter لسطر جديد
+        {msg("chat.composer.hint")}
       </div>
       <AIPriceNote />
     </div>

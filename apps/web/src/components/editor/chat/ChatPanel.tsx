@@ -14,12 +14,13 @@ import { ChatErrorCard } from "./ChatErrorCard";
 import { ChatHistoryPanel } from "./ChatHistoryPanel";
 import { EditSharingPanel } from "./EditSharingPanel";
 import { useAIConnectionStore } from "../../../stores/ai-connection-store";
+import { msg, type MessageKey } from "../../../hawsh/i18n/messages";
 
-const SUGGESTIONS: ReadonlyArray<string> = [
-  "أضف عنواناً نصه «مرحباً» في أول 3 ثوانٍ",
-  "اقتطع ثانيتين من نهاية أول مقطع",
-  "أضف تلاشياً تدريجياً في بداية أول مقطع",
-  "اعرض كل ما على الخط الزمني",
+const SUGGESTIONS: ReadonlyArray<MessageKey> = [
+  "chat.suggestion.title",
+  "chat.suggestion.trim",
+  "chat.suggestion.fade",
+  "chat.suggestion.list",
 ];
 
 function EmptyState({
@@ -51,10 +52,10 @@ function EmptyState({
           {SUGGESTIONS.map((s) => (
             <Button
               key={s}
-              label={s}
+              label={msg(s)}
               variant="ghost"
               size="sm"
-              onClick={() => void send(s)}
+              onClick={() => void send(msg(s))}
               className="w-full rounded-md border border-border bg-bg-1/60 px-2.5 py-1.5 text-start text-[11px] text-fg-2 transition-colors hover:border-accent/50 hover:bg-hover hover:text-fg"
             />
           ))}
@@ -111,10 +112,10 @@ export function ChatPanel({
         </span>
         {totalTokens > 0 && (
           <span
-            title={`${usage.inputTokens} إدخال · ${usage.outputTokens} إخراج`}
+            title={msg("chat.panel.tokensTitle", { input: usage.inputTokens, output: usage.outputTokens })}
             className="shrink-0 rounded bg-bg-2 px-1.5 py-0.5 text-[10px] tabular-nums text-fg-muted"
           >
-            {tokenLabel} رمز
+            {msg("chat.panel.tokens", { count: tokenLabel })}
           </span>
         )}
         <div className="ms-auto flex items-center gap-1">
@@ -185,7 +186,7 @@ export function ChatPanel({
       <div
         ref={scrollRef}
         role="log"
-        aria-label="المحادثة ونتائج التعديل"
+        aria-label={msg("chat.panel.log")}
         aria-live="polite"
         className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3"
       >

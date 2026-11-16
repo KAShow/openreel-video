@@ -12,6 +12,7 @@ import type {
 import { runExclusive } from "../services/agent/host-singleton";
 import { validateAIEndpoint } from "../services/agent/direct-llm-transport";
 import { HAWSH_AI_ONLY_MESSAGE, isHawshAI, makeHawshAIClient } from "../hawsh/ai";
+import { msg } from "../hawsh/i18n/messages";
 import { EditingSession } from "../services/agent/editing-session";
 import { editingToolDefs, editingToolReadOnly, executeEditingTool, EDITING_SYSTEM } from "../services/agent/editing-tools";
 import { useAIConnectionStore } from "./ai-connection-store";
@@ -147,7 +148,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     if (!useProjectStore.getState().hasOpenProject) {
-      set({ error: "افتح مشروعاً أو أنشئ مشروعاً جديداً قبل بدء المحادثة." });
+      set({ error: msg("chat.error.noProject") });
       return;
     }
 
@@ -158,13 +159,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     const { provider, model, baseUrl: inputBaseUrl, apiKey } = useAIConnectionStore.getState();
-    if (!["openai", "anthropic", "compatible"].includes(provider)) { set({ error: "اختر صيغة الواجهة في الإعدادات ← مساعد المونتاج." }); return; }
-    if (!model.trim()) { set({ error: "أدخل معرّف النموذج في الإعدادات ← مساعد المونتاج." }); return; }
+    if (!["openai", "anthropic", "compatible"].includes(provider)) { set({ error: msg("chat.error.apiFormat") }); return; }
+    if (!model.trim()) { set({ error: msg("chat.error.modelId") }); return; }
     let baseUrl: string;
-    try { baseUrl = validateAIEndpoint(inputBaseUrl); } catch { set({ error: "أدخل عنوان HTTPS صالحاً، أو HTTP على الجهاز المحلي فقط." }); return; }
+    try { baseUrl = validateAIEndpoint(inputBaseUrl); } catch { set({ error: msg("chat.error.endpoint") }); return; }
     if (provider !== "compatible" && !apiKey) {
       set({
-        error: "أضف مفتاح الواجهة لهذه الجلسة في الإعدادات ← مساعد المونتاج قبل إرسال طلب التعديل.",
+        error: msg("chat.error.apiKey"),
       });
       return;
     }
@@ -266,7 +267,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
     try { llm = makeHawshAIClient(controller.signal); } catch (error) {
-      set({ status: "error", error: error instanceof Error ? error.message : "إعدادات الاتصال غير صالحة.", abortController: null });
+      set({ status: "error", error: error instanceof Error ? error.message : msg("chat.error.connection"), abortController: null });
       return;
     }
     const tools = editingToolDefs(provider === "anthropic" ? "anthropic" : "openai");
@@ -294,12 +295,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 set({ status: "awaiting_confirm", pendingConfirm: { call, resolve } });
               }),
         onEvent,
-        turnLabel: "تعديل بالمساعد",
+        turnLabel: msg("chat.turn.undoLabel"),
       }),
     );
     } catch (error) {
       if (activeSeq !== seq) return;
-      set({ status: controller.signal.aborted ? "idle" : "error", error: controller.signal.aborted ? null : error instanceof Error ? error.message : "تعذّر إكمال طلب المساعد.", abortController: null, pendingConfirm: null, conversation: [] });
+      set({ status: controller.signal.aborted ? "idle" : "error", error: controller.signal.aborted ? null : error instanceof Error ? error.message : msg("chat.error.turnFailed"), abortController: null, pendingConfirm: null, conversation: [] });
       saveConversationSnapshot(get()); return;
     }
 
@@ -308,21 +309,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const wasAborted = controller.signal.aborted;
     const stopNotice =
       result.stoppedReason === "max_steps"
-        ? "توقفت لأنني بلغت حدّ الخطوات في هذا الطلب. اطلب مني المتابعة إن بقي عمل."
+        ? msg("chat.stop.maxSteps")
         : result.stoppedReason === "max_tool_calls"
-          ? "توقفت لأنني بلغت حدّ استدعاءات الأدوات في هذا الطلب. اطلب مني المتابعة إن بقي عمل."
+          ? msg("chat.stop.maxToolCalls")
           : result.stoppedReason === "budget"
-            ? "توقف النموذج عند حدّ الردّ أو حدّ الرموز. اطلب مني المتابعة، أو ارفع حدّ إخراج النموذج."
+            ? msg("chat.stop.budget")
             : undefined;
     set((state) => ({
       messages: state.messages.map((message) => {
         if (message.id !== assistantId) return message;
-        const finalText = wasAborted ? "أُلغي الطلب، وتم تجاهل التعديلات المعلّقة." : !result.committed ? "تعذّر إكمال الطلب، ولم يُطبَّق أي تعديل." : result.text || message.text;
+        const finalText = wasAborted ? msg("chat.turn.cancelled") : !result.committed ? msg("chat.turn.failedNoEdits") : result.text || message.text;
         const emptyNotice =
           !finalText && result.stoppedReason === "end_turn"
             ? message.toolCalls.length > 0
-              ? "اكتملت التعديلات، لكن النموذج لم يكتب ملخصاً."
-              : "أعاد النموذج ردّاً فارغاً. حاول مرة أخرى."
+              ? msg("chat.turn.noSummary")
+              : msg("chat.turn.empty")
             : undefined;
         return {
           ...message,
@@ -349,7 +350,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: wasAborted
         ? null
         : result.stoppedReason === "error"
-          ? (state.error ?? "تعذّر إكمال طلب المساعد.")
+          ? (state.error ?? msg("chat.error.turnFailed"))
           : state.error,
     }));
     saveConversationSnapshot(get());
