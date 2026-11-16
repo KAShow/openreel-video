@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { useState, useCallback, type KeyboardEvent } from "react";
+import { useCallback, type KeyboardEvent } from "react";
 import { ToolcraftIconButton as IconButton } from "@openreel/ui";
 import { ToolcraftTextAreaControl } from "@openreel/ui";
 import { Send, Square } from "@/icons/lucide-compat";
@@ -11,7 +11,10 @@ export function ChatComposer(): JSX.Element {
   const status = useChatStore((s) => s.status);
   const send = useChatStore((s) => s.send);
   const stop = useChatStore((s) => s.stop);
-  const [text, setText] = useState("");
+  const text = useChatStore((s) => s.draft);
+  const setText = useChatStore((s) => s.setDraft);
+  const mode = useChatStore((s) => s.mode);
+  const setMode = useChatStore((s) => s.setMode);
   const busy = status === "running" || status === "awaiting_confirm";
 
   const submit = useCallback(() => {
@@ -19,7 +22,7 @@ export function ChatComposer(): JSX.Element {
     if (!value || busy) return;
     setText("");
     void send(value);
-  }, [text, busy, send]);
+  }, [text, busy, send, setText]);
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -33,6 +36,24 @@ export function ChatComposer(): JSX.Element {
 
   return (
     <div className="border-t border-border p-2">
+      {/* Hawsh Khalifa build: chat first (a plan to confirm) or edit straight away (src/hawsh/assistant-mode.ts). */}
+      <div role="radiogroup" aria-label={msg("chat.mode.chat")} className="mb-1.5 flex items-center gap-1 text-[11px]">
+        {(["chat", "direct"] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={mode === value}
+            disabled={busy}
+            title={msg(value === "chat" ? "chat.mode.chatHint" : "chat.mode.directHint")}
+            onClick={() => setMode(value)}
+            className={`rounded-md px-2 py-0.5 transition-colors disabled:opacity-50 ${mode === value ? "bg-accent-soft font-medium text-accent" : "text-fg-muted hover:bg-hover hover:text-fg"}`}
+          >
+            {msg(value === "chat" ? "chat.mode.chat" : "chat.mode.direct")}
+          </button>
+        ))}
+        <span className="ms-1 truncate text-[10px] text-fg-muted">{msg(mode === "chat" ? "chat.mode.chatHint" : "chat.mode.directHint")}</span>
+      </div>
       <div className="relative rounded-lg border border-border bg-bg-2 transition-colors focus-within:border-accent">
         <ToolcraftTextAreaControl
           label="AI edit request"

@@ -10,9 +10,9 @@ export const AR: Record<string, string> = {
   ...AR_ADDITIONAL,
   ...AR_CONTROLS,
   // ── Title, welcome screen, tour ─────────────────────────────────────────
-  "Director's Eyes Editor — Hawsh Khalifa": "محرر عيون المخرج — حوش خليفة",
-  "Director's Eyes Editor": "محرر عيون المخرج",
-  "by Hawsh Khalifa · built on OpenReel": "من حوش خليفة · مبني على OpenReel",
+  "Director's Eyes Editor — Hawsh Khalifa": "مونتاج عيون المخرج — حوش خليفة",
+  "Director's Eyes Editor": "مونتاج عيون المخرج",
+  "by Hawsh Khalifa · built on OpenReel": "من حوش خليفة",
   "From idea to export.": "من الفكرة إلى التصدير.",
   "In your browser.": "في متصفحك.",
   "Pick a format and start creating. You can change this anytime.": "اختر شكل الفيديو وابدأ. تقدر تغيّره في أي وقت.",
@@ -41,7 +41,7 @@ export const AR: Record<string, string> = {
   "Recovering...": "جارٍ الاستعادة...",
   "Last saved": "آخر حفظ",
   "just now": "الآن",
-  "Welcome to the Director's Eyes Editor": "أهلاً بك في محرر عيون المخرج",
+  "Welcome to the Director's Eyes Editor": "أهلاً بك في مونتاج عيون المخرج",
   "A quick map of the current editor layout: tools on the left, playback in the center, timeline below, and properties on the right.":
     "خريطة سريعة للمحرر: الأدوات على اليسار، والمشغّل في الوسط، والخط الزمني في الأسفل، والخصائص على اليمين.",
   "Back": "رجوع",

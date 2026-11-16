@@ -10,6 +10,7 @@ import { registerServiceWorker } from "./services/service-worker";
 import { initCustomFonts } from "./components/editor/inspector/font-options";
 import { takeHandoff } from "./hawsh/handoff";
 import { initHawsh } from "./hawsh/session";
+import { installLogger } from "./hawsh/logger";
 import { startArabicUi } from "./hawsh/i18n/dom";
 import { initHawshAI } from "./hawsh/ai";
 
@@ -41,6 +42,7 @@ if (isDesktop) {
 
 // Director's Eyes sign-in: strip the one-time code from the address bar before the router reads the hash.
 void initHawsh(takeHandoff());
+installLogger();
 
 // AI editing on Director's Eyes points once signed in (keeps a user's own key if they set one).
 initHawshAI();
