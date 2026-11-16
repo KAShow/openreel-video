@@ -16,7 +16,7 @@ import { EditSharingPanel } from "./EditSharingPanel";
 import { useAIConnectionStore } from "../../../stores/ai-connection-store";
 import { msg } from "../../../hawsh/i18n/messages";
 import { SIMPLE_EDITOR } from "../../../hawsh/simple";
-import { chatStart } from "./suggestions";
+import { chatStart, nextSteps } from "./suggestions";
 
 function EmptyState({
   hasOpenProject,
@@ -60,6 +60,32 @@ function EmptyState({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** One-tap requests under the assistant's last reply: what the project still lacks. */
+function NextSteps(): JSX.Element | null {
+  const send = useChatStore((s) => s.send);
+  const messages = useChatStore((s) => s.messages);
+  const project = useProjectStore((s) => s.project);
+  const keys = nextSteps(project, messages);
+  if (keys.length === 0) return null;
+  return (
+    <div className="space-y-1.5">
+      <div className="text-[10px] text-fg-muted">{msg("chat.next.label")}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {keys.map((key) => (
+          <Button
+            key={key}
+            label={msg(key)}
+            variant="ghost"
+            size="sm"
+            onClick={() => void send(msg(key))}
+            className="rounded-full border border-border bg-bg-1/60 px-2.5 py-1 text-start text-[11px] text-fg-2 transition-colors hover:border-accent/50 hover:bg-hover hover:text-fg"
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -205,6 +231,8 @@ export function ChatPanel({
         )}
 
         {pendingConfirm && <InlineConfirmCard call={pendingConfirm.call} />}
+
+        {!busy && !error && messages.at(-1)?.role === "assistant" && <NextSteps />}
 
         {error && (
           <ChatErrorCard

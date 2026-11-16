@@ -59,6 +59,9 @@ export const MESSAGES = {
   "chat.suggestion.addFirst": "ضع أول فيديو من المكتبة على الخط الزمني",
   "chat.suggestion.addAll": "ضع كل ملفات المكتبة على الخط الزمني بالترتيب",
   "chat.suggestion.silence": "احذف فترات الصمت من الفيديو",
+  "chat.suggestion.captions": "ضع كابشن عربي للفيديو",
+  "chat.suggestion.vertical": "حوّل الفيديو إلى المقاس العمودي للريلز",
+  "chat.next.label": "جرّب بعدها",
   "chat.empty.needsMedia": "أضف فيديو أو صورة من «الوسائط» أولاً، ثم اطلب التعديل بالكلام.",
   "chat.composer.hint": "اضغط Enter للإرسال · Shift+Enter لسطر جديد",
 

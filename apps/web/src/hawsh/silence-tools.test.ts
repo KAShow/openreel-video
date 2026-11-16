@@ -3,7 +3,8 @@ import type { ToolResult } from "@openreel/agent";
 import { useProjectStore } from "../stores/project-store";
 import { EditingSession } from "../services/agent/editing-session";
 import { editingToolDefs, editingToolReadOnly, executeEditingTool } from "../services/agent/editing-tools";
-import { SILENCE_DEFAULTS, silenceRegions } from "./silence-tools";
+import { TitleEngine } from "@openreel/core/text/title-engine";
+import { SILENCE_DEFAULTS, silenceRegions, timeAfterCuts } from "./silence-tools";
 
 const opts = SILENCE_DEFAULTS; // -40 dB, 0.5 s minimum, 0.1 s padding
 
@@ -21,6 +22,19 @@ describe("silenceRegions", () => {
   });
   it("drops pauses shorter than the minimum (after padding) and ones outside the clip", () => {
     expect(silenceRegions(clip, [{ start: 4, end: 4.6 }, { start: 11, end: 13 }], opts)).toEqual([]);
+  });
+});
+
+describe("timeAfterCuts", () => {
+  const cuts = [{ start: 2.1, end: 3.4 }, { start: 6.1, end: 7.9 }];
+  it("keeps times before the first cut and pulls later ones left by what was removed", () => {
+    expect(timeAfterCuts(1, cuts)).toBe(1);
+    expect(timeAfterCuts(4, cuts)).toBe(2.7);
+    expect(timeAfterCuts(9, cuts)).toBe(5.9);
+  });
+  it("lands a time inside a cut on the cut's start", () => {
+    expect(timeAfterCuts(3, cuts)).toBe(2.1);
+    expect(timeAfterCuts(7, cuts)).toBe(4.8);
   });
 });
 
@@ -87,6 +101,26 @@ describe("detect_silence / cut_silence tools", () => {
       { start: 2.1, dur: 2.7, in: 3.4 },
       { start: 4.8, dur: 2.1, in: 7.9 },
     ]);
+  });
+
+  it("cut_silence carries the clip's caption lines with it, and leaves other text alone", async () => {
+    const { session, clipId } = await setup();
+    const { trackId: textTrack } = ok(await executeEditingTool("add_track", { trackType: "text" }, session));
+    session.allowNonPortableDraft();
+    const add = async (text: string, startTime: number, duration: number, caption: boolean) => {
+      const clip = new TitleEngine().createTextClip({ trackId: textTrack as string, text, startTime, duration, ...(caption ? { metadata: { captionSource: "whisper", captionSourceClipId: clipId } } : {}) });
+      expect((await session.applyAction({ type: "text/create", id: crypto.randomUUID(), timestamp: Date.now(), params: { clip } })).success).toBe(true);
+    };
+    await add("before", 0.5, 1, true);    // before both pauses: stays
+    await add("in pause", 2.5, 0.7, true); // wholly inside the first pause (2.1–3.4): dropped
+    await add("middle", 4, 1, true);       // after 1.3 s removed
+    await add("end", 8.5, 1, true);        // after 3.1 s removed
+    await add("title", 4, 1, false);       // not a caption: other tracks are not moved
+
+    const data = ok(await executeEditingTool("cut_silence", { clipId }, session));
+    expect(data).toMatchObject({ removed: 2, captionLinesMoved: 3 });
+    const texts = (session.getProject().textClips ?? []).map((t) => [t.text, +t.startTime.toFixed(3), +t.duration.toFixed(3)]);
+    expect(texts).toEqual([["before", 0.5, 1], ["middle", 2.7, 1], ["end", 5.4, 1], ["title", 4, 1]]);
   });
 
   it("refuses sped-up clips", async () => {
