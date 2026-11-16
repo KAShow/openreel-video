@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from "react";
-import { ArrowRight, Clock, Plus } from "@/icons/lucide-compat";
+import { ArrowRight, LogIn, Plus } from "@/icons/lucide-compat";
 import { ToolcraftButton as Button } from "@openreel/ui";
 import { ToolcraftText as Text } from "@openreel/ui";
 import { useProjectStore } from "../../stores/project-store";
@@ -7,7 +7,8 @@ import { SOCIAL_MEDIA_PRESETS } from "@openreel/core";
 import { useRouter } from "../../hooks/use-router";
 import { useEditorPreload } from "../../hooks/useEditorPreload";
 import { useAnalytics, AnalyticsEvents } from "../../hooks/useAnalytics";
-import { useHawshStore } from "../../hawsh/session";
+import { signOutHawsh, useHawshStore } from "../../hawsh/session";
+import { HAWSH_EDITOR_NAME, HAWSH_EDITOR_PAGE } from "../../hawsh/config";
 
 const TemplateGallery = lazy(() =>
   import("./TemplateGallery").then((module) => ({ default: module.TemplateGallery })),
@@ -88,7 +89,7 @@ const OpenReelLogo: React.FC<{ className?: string }> = ({ className = "" }) => (
   </svg>
 );
 
-type ViewMode = "home" | "templates" | "recent";
+type ViewMode = "home" | "templates";
 
 interface WelcomeScreenProps {
   initialTab?: "templates" | "recent";
@@ -96,12 +97,10 @@ interface WelcomeScreenProps {
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
   const createNewProject = useProjectStore((state) => state.createNewProject);
-  const email = useHawshStore((state) => state.email);
   const { navigate } = useRouter();
   const { track } = useAnalytics();
 
-  const [viewMode, setViewMode] = useState<ViewMode>(initialTab ?? "home");
-  const displayName = email?.split("@")[0];
+  const [viewMode, setViewMode] = useState<ViewMode>(initialTab === "templates" ? "templates" : "home");
 
   useEditorPreload(true);
 
@@ -167,20 +166,18 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
     );
   }
 
-  if (viewMode === "recent") {
-    return (
-      <div dir="rtl" data-ar className="fixed inset-0 z-50 flex flex-col bg-background">
-        <header className="relative z-10 border-b border-border bg-background/95 backdrop-blur-xl">
-          <div className="mx-auto flex h-[72px] w-full max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="h-9 w-9 shrink-0 text-primary">
-                <OpenReelLogo className="h-full w-full" />
-              </div>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-text-primary">Director's Eyes</div>
-                <div className="mt-0.5 text-[11px] text-text-muted">مشاريعك تبدأ من هنا</div>
-              </div>
+  // Start page (Hawsh Khalifa build): the saved projects right away, with "New project" beside them.
+  return (
+    <div dir="rtl" data-ar className="fixed inset-0 z-50 flex flex-col bg-background">
+      <header className="relative z-10 border-b border-border bg-background/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-[72px] w-full max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="h-9 w-9 shrink-0 text-primary">
+              <OpenReelLogo className="h-full w-full" />
             </div>
+            <div className="truncate text-sm font-semibold text-text-primary sm:text-base">{HAWSH_EDITOR_NAME}</div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <Button
               label="مشروع جديد"
               variant="primary"
@@ -188,75 +185,61 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
               onClick={handleCreateProject}
               className="shrink-0 rounded-xl shadow-glow"
             />
-          </div>
-        </header>
-        <main className="relative flex-1 overflow-y-auto">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-[radial-gradient(ellipse_at_top,var(--accent-soft),transparent_65%)] opacity-30" />
-          <div className="relative mx-auto w-full max-w-[1440px] px-4 py-7 sm:px-6 sm:py-10 lg:px-10">
-            <Suspense fallback={<LoadingView />}>
-              <RecentProjects
-                onProjectSelected={handleProjectSelected}
-                onCreateProject={handleCreateProject}
-              />
-            </Suspense>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  return (
-    <div dir="rtl" data-ar className="fixed inset-0 z-50 overflow-y-auto bg-background">
-      <header className="mx-auto flex h-20 w-full max-w-5xl items-center justify-between px-5 sm:px-8">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 text-primary">
-            <OpenReelLogo className="h-full w-full" />
-          </div>
-          <div>
-            <div className="text-sm font-semibold text-text-primary">محرر عيون المخرج</div>
-            {/* MIT attribution: this editor is a modified OpenReel (see /LICENSE.txt). */}
-            <a
-              href="/LICENSE.txt"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-0.5 block text-[11px] text-text-muted hover:text-text-secondary"
-            >
-              مبني على OpenReel
-            </a>
+            <AccountButton />
           </div>
         </div>
-        {displayName && (
-          <div className="flex items-center gap-2 text-xs text-text-secondary" title={email ?? undefined}>
-            <span className="hidden max-w-32 truncate sm:block">{displayName}</span>
-            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background-secondary text-xs font-semibold text-primary">
-              {Array.from(displayName)[0]?.toUpperCase()}
-            </span>
-          </div>
-        )}
       </header>
-
-      <main aria-label="البدء" className="mx-auto flex min-h-[calc(100dvh-5rem)] w-full max-w-md flex-col justify-center px-5 py-10 sm:px-8 sm:py-14">
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={handleCreateProject}
-            className={`flex h-14 w-full items-center justify-center gap-3 rounded-xl bg-primary text-base font-semibold text-primary-foreground transition-colors hover:bg-primary-hover ${focusRing}`}
-          >
-            <Plus size={20} aria-hidden />
-            مشروع جديد
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("recent")}
-            className={`flex h-14 w-full items-center justify-center gap-3 rounded-xl border border-border bg-background-secondary text-base font-medium text-text-primary transition-colors hover:border-primary/40 hover:bg-background-tertiary ${focusRing}`}
-          >
-            <Clock size={19} className="text-primary" aria-hidden />
-            المشاريع السابقة
-          </button>
+      <main aria-label="مشاريعك" className="relative flex-1 overflow-y-auto">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-[radial-gradient(ellipse_at_top,var(--accent-soft),transparent_65%)] opacity-30" />
+        <div className="relative mx-auto w-full max-w-[1440px] px-4 py-7 sm:px-6 sm:py-10 lg:px-10">
+          <Suspense fallback={<LoadingView />}>
+            <RecentProjects
+              onProjectSelected={handleProjectSelected}
+              onCreateProject={handleCreateProject}
+            />
+          </Suspense>
         </div>
       </main>
     </div>
   );
 };
+
+/**
+ * The account corner: signed out, a button that signs in through Director's Eyes (the site issues the
+ * one-time code and opens the editor signed in); signed in, the account name with sign-out.
+ */
+function AccountButton() {
+  const status = useHawshStore((state) => state.status);
+  const email = useHawshStore((state) => state.email);
+  const displayName = email?.split("@")[0];
+
+  if (status === "ready" && displayName) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-text-secondary" title={email ?? undefined}>
+        <span className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background-secondary text-xs font-semibold text-primary">
+          {Array.from(displayName)[0]?.toUpperCase()}
+        </span>
+        <span className="hidden max-w-32 truncate md:block">{displayName}</span>
+        <button
+          type="button"
+          onClick={() => void signOutHawsh()}
+          className={`rounded-lg px-2 py-1 text-text-muted transition-colors hover:bg-background-tertiary hover:text-text-primary ${focusRing}`}
+        >
+          خروج
+        </button>
+      </div>
+    );
+  }
+  return (
+    <a
+      href={HAWSH_EDITOR_PAGE}
+      className={`flex h-10 items-center gap-2 rounded-xl border border-border bg-background-secondary px-3 text-sm font-medium text-text-primary transition-colors hover:border-primary/40 hover:bg-background-tertiary ${focusRing}`}
+    >
+      <LogIn size={16} className="text-primary" aria-hidden />
+      <span className="hidden sm:inline">تسجيل الدخول بعيون المخرج</span>
+      <span className="sm:hidden">دخول</span>
+    </a>
+  );
+}
 
 export default WelcomeScreen;

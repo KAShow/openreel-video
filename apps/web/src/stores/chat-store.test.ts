@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
   projectState: { hasOpenProject: true, projectId: "project-a" },
   undoStackSize: 0,
   transcribePoints: 0,
+  logTurn: vi.fn(),
   settings: {
     defaultLlmProvider: "openai-compatible" as string | null,
     llmBaseUrl: "https://gateway.example/v1",
@@ -53,8 +54,9 @@ vi.mock("../hawsh/ai", () => ({
   makeHawshAIClient: h.makeHawshClient,
 }));
 vi.mock("../services/agent/editing-session", () => ({ EditingSession: class { committed = true; } }));
-vi.mock("../services/agent/editing-tools", () => ({ editingToolDefs: () => [], editingToolReadOnly: () => false, editingToolNeedsConfirm: (name: string) => name === "transcribe_clip", executeEditingTool: vi.fn(), EDITING_SYSTEM: "system" }));
-vi.mock("../hawsh/assistant-prompt", () => ({ assistantSystem: (project: { id: string }, ui: { playheadSec?: number; selectedIds?: string[] }) => `system for ${project.id} at ${ui.playheadSec}s, selected: ${ui.selectedIds?.join(",")}` }));
+vi.mock("../services/agent/editing-tools", () => ({ editingToolDefs: () => [{ type: "function", function: { name: "list_clips" } }, { type: "function", function: { name: "trim_clip" } }], editingToolReadOnly: (name: string) => name.startsWith("list_"), editingToolNeedsConfirm: (name: string) => name === "transcribe_clip", executeEditingTool: vi.fn(), EDITING_SYSTEM: "system" }));
+vi.mock("../hawsh/assistant-prompt", () => ({ assistantSystem: (project: { id: string }, ui: { playheadSec?: number; selectedIds?: string[] }, phase = "direct") => `system for ${project.id} at ${ui.playheadSec}s, selected: ${ui.selectedIds?.join(",")}${phase === "direct" ? "" : `, ${phase}`}` }));
+vi.mock("../hawsh/logger", () => ({ logAssistantTurn: h.logTurn }));
 vi.mock("./timeline-store", () => ({ useTimelineStore: { getState: () => ({ playheadPosition: 4 }) } }));
 vi.mock("./ui-store", () => ({ useUIStore: { getState: () => ({ selectedItems: [{ type: "clip", id: "clip-1" }] }) } }));
 vi.mock("../hawsh/transcribe-tool", async (importOriginal) => ({
@@ -103,6 +105,8 @@ const store = () => useChatStore.getState();
 describe("chat-store", () => {
   beforeEach(() => {
     store().reset();
+    // Most tests drive edits directly; chat mode (the default) has its own tests below.
+    store().setMode("direct");
     useChatHistoryStore.getState().clearHistory();
     vi.clearAllMocks();
     h.getSecret.mockResolvedValue("test-key");
@@ -247,6 +251,68 @@ describe("chat-store", () => {
       role: "assistant",
       content: "Done!",
       toolUses: [],
+    });
+  });
+
+  describe("chat mode: a plan first, edits only after the user confirms", () => {
+    const toolNames = (input: RunTurnInput) => (input.tools as Array<{ function?: { name: string }; name?: string }>).map((t) => t.function?.name ?? t.name);
+
+    it("is the default, and a plan request offers only read-only tools and never edits", async () => {
+      localStorage.removeItem("hawsh:assistant-mode");
+      store().setMode("chat");
+      h.runTurn.mockImplementation(impl(async ({ messages, execute }) => {
+        const edit = await execute!("trim_clip", { clipId: "c1" }, { getProject: () => ({ name: "p", timeline: { tracks: [] }, mediaLibrary: { items: [] } }) } as never);
+        expect(edit).toMatchObject({ ok: false, error: { code: "PLAN_ONLY" } });
+        return { text: "سأقص آخر ثانيتين من المقطع الأول.\n1. قص من 8 إلى 10 ثوانٍ\n[[RUN]]", messages: [...messages, { role: "assistant", content: "plan", toolUses: [] }], toolCalls: 1, stoppedReason: "end_turn", committed: true };
+      }));
+      await store().send("قص آخر ثانيتين");
+      const input = h.runTurn.mock.calls[0][0] as RunTurnInput;
+      expect(input.system).toContain(", plan");
+      expect(toolNames(input)).toEqual(["list_clips"]);
+      const reply = store().messages.at(-1)!;
+      expect(reply).toMatchObject({ role: "assistant", plan: true, text: "سأقص آخر ثانيتين من المقطع الأول.\n1. قص من 8 إلى 10 ثوانٍ" });
+      expect(h.logTurn).toHaveBeenCalledWith(expect.objectContaining({ phase: "plan", request: "قص آخر ثانيتين", plan: true, committed: true }));
+    });
+
+    it("carries the plan out with one button, with all tools", async () => {
+      store().setMode("chat");
+      h.runTurn.mockImplementationOnce(impl(async () => ({ text: "الخطة…\n[[RUN]]", messages: [], toolCalls: 0, stoppedReason: "end_turn", committed: true })));
+      await store().send("قص آخر ثانيتين");
+      h.runTurn.mockImplementationOnce(impl(async () => ({ text: "قصصت ثانيتين.", messages: [], toolCalls: 1, stoppedReason: "end_turn", committed: true })));
+      await store().runPlan();
+      const input = h.runTurn.mock.calls[1][0] as RunTurnInput;
+      expect(input.system).toContain(", execute");
+      expect(input.messages.at(-1)).toEqual({ role: "user", content: "نفّذ الخطة" });
+      expect(input.messages.at(-2)).toEqual({ role: "assistant", content: "الخطة…", toolUses: [] });
+      expect(store().messages.map((m) => [m.role, m.text, !!m.plan])).toEqual([
+        ["user", "قص آخر ثانيتين", false], ["assistant", "الخطة…", false],
+        ["user", "نفّذ الخطة", false], ["assistant", "قصصت ثانيتين.", false],
+      ]);
+    });
+
+    it("does nothing when there is no plan waiting", async () => {
+      store().setMode("chat");
+      h.runTurn.mockImplementationOnce(impl(async () => ({ text: "أستطيع القص والترجمة…", messages: [], toolCalls: 0, stoppedReason: "end_turn", committed: true })));
+      await store().send("وش تقدر تسوي؟");
+      expect(store().messages.at(-1)?.plan).toBeUndefined();
+      await store().runPlan();
+      expect(h.runTurn).toHaveBeenCalledTimes(1);
+    });
+
+    it("drops an old plan's button once the user asks something else", async () => {
+      store().setMode("chat");
+      h.runTurn.mockImplementation(impl(async () => ({ text: "خطة\n[[RUN]]", messages: [], toolCalls: 0, stoppedReason: "end_turn", committed: true })));
+      await store().send("قص");
+      await store().send("لا، قص ثلاث ثوانٍ");
+      expect(store().messages.filter((m) => m.plan)).toHaveLength(1);
+      expect(store().messages.at(-1)?.plan).toBe(true);
+    });
+
+    it("remembers the chosen mode", () => {
+      store().setMode("direct");
+      expect(localStorage.getItem("hawsh:assistant-mode")).toBe("direct");
+      store().setMode("chat");
+      expect(localStorage.getItem("hawsh:assistant-mode")).toBe("chat");
     });
   });
 

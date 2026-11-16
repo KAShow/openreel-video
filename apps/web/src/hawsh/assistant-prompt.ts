@@ -7,6 +7,7 @@
 import type { Project } from "@openreel/core";
 import { EDITING_SYSTEM } from "../services/agent/editing-tools";
 import { projectSnapshot, type AssistantUiState } from "./assistant-context";
+import { PHASE_GUIDE, type AssistantPhase } from "./assistant-mode";
 
 export const ASSISTANT_GUIDE = `You are the editing assistant inside the «عيون المخرج» video editor. You work like an experienced video editor sitting next to the user: you understand what they are trying to make, do the work on their timeline with the tools, and tell them plainly what you did. The users are Arabic-speaking creators, most of them not technical, making short videos for Instagram Reels, TikTok, YouTube Shorts and ads.
 
@@ -41,7 +42,8 @@ Your reply, after the tools have run:
 - First what changed, with the numbers that matter (seconds removed, how many caption lines, the new length). Then, only if something failed or was skipped, what and why in one sentence. Never claim a change that did not succeed.
 - End with one useful next step as an offer the user can accept with one word, chosen from what this project still lacks. Do not repeat an offer they already declined.`;
 
-/** The full system prompt for one request: behaviour, tool rules, then the project as it is now. */
-export function assistantSystem(project: Project, ui?: AssistantUiState): string {
-  return `${ASSISTANT_GUIDE}\n\nTool rules:\n${EDITING_SYSTEM}\n\n${projectSnapshot(project, ui)}`;
+/** The full system prompt for one request: behaviour, tool rules, the mode, then the project as it is now. */
+export function assistantSystem(project: Project, ui?: AssistantUiState, phase: AssistantPhase = "direct"): string {
+  const mode = PHASE_GUIDE[phase] ? `\n\n${PHASE_GUIDE[phase]}` : "";
+  return `${ASSISTANT_GUIDE}\n\nTool rules:\n${EDITING_SYSTEM}${mode}\n\n${projectSnapshot(project, ui)}`;
 }

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ToolcraftButton as Button } from "@openreel/ui";
 import { ToolcraftIconButton as IconButton } from "@openreel/ui";
 import { ToolcraftText as Text } from "@openreel/ui";
-import { Bot, X, Undo2, Plus, History, Sparkles, Settings } from "@/icons/lucide-compat";
+import { Bot, X, Undo2, Plus, History, Sparkles, Settings, BookOpen, Play } from "@/icons/lucide-compat";
 import { useChatStore } from "../../../stores/chat-store";
 import { useProjectStore } from "../../../stores/project-store";
 import { useSettingsStore } from "../../../stores/settings-store";
@@ -17,11 +17,14 @@ import { useAIConnectionStore } from "../../../stores/ai-connection-store";
 import { msg } from "../../../hawsh/i18n/messages";
 import { SIMPLE_EDITOR } from "../../../hawsh/simple";
 import { chatStart, nextSteps } from "./suggestions";
+import { AssistantGuide } from "./AssistantGuide";
 
 function EmptyState({
   hasOpenProject,
+  onOpenGuide,
 }: {
   hasOpenProject: boolean;
+  onOpenGuide: () => void;
 }): JSX.Element {
   const send = useChatStore((s) => s.send);
   const connection = useAIConnectionStore();
@@ -60,6 +63,9 @@ function EmptyState({
           ))}
         </div>
       )}
+      <button type="button" onClick={onOpenGuide} className="mt-3 text-[11px] text-accent underline-offset-2 hover:underline">
+        {msg("chat.guide.open")}
+      </button>
     </div>
   );
 }
@@ -86,6 +92,24 @@ function NextSteps(): JSX.Element | null {
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+/** The confirmation under a plan proposed in chat mode: nothing is edited until the user presses it. */
+function PlanCard(): JSX.Element {
+  const runPlan = useChatStore((s) => s.runPlan);
+  return (
+    <div className="ms-8 flex flex-wrap items-center gap-2 rounded-lg border border-accent/40 bg-accent-soft/40 p-2">
+      <Button
+        label={msg("chat.plan.run")}
+        variant="primary"
+        size="sm"
+        icon={<Play size={12} aria-hidden className="rtl:-scale-x-100" />}
+        onClick={() => void runPlan()}
+        className="rounded-md bg-accent px-3 py-1 text-[12px] font-medium text-accent-fg hover:bg-accent/90"
+      />
+      <span className="text-[11px] text-fg-2">{msg("chat.plan.hint")}</span>
     </div>
   );
 }
@@ -118,6 +142,13 @@ export function ChatPanel({
   const busy = status === "running" || status === "awaiting_confirm";
   const scrollRef = useRef<HTMLDivElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const draft = useChatStore((s) => s.draft);
+  const lastMessage = messages.at(-1);
+  const planPending = !busy && lastMessage?.role === "assistant" && !!lastMessage.plan;
+
+  // An example picked in the guide lands in the composer: show the chat again.
+  useEffect(() => { if (draft) setGuideOpen(false); }, [draft]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -144,6 +175,15 @@ export function ChatPanel({
           </span>
         )}
         <div className="ms-auto flex items-center gap-1">
+          <IconButton
+            label={msg("chat.guide.open")}
+            icon={<BookOpen size={14} aria-hidden />}
+            size="sm"
+            variant={guideOpen ? "secondary" : "ghost"}
+            onClick={() => { setGuideOpen((open) => !open); setHistoryOpen(false); }}
+            aria-pressed={guideOpen}
+            className="grid h-7 w-7 place-items-center rounded-md text-fg-2 transition-colors hover:bg-hover hover:text-fg"
+          />
           <IconButton
             label="AI settings"
             icon={<Settings size={14} aria-hidden />}
@@ -211,15 +251,18 @@ export function ChatPanel({
         />
       )}
 
+      {guideOpen && <AssistantGuide onClose={() => setGuideOpen(false)} />}
+
       <div
         ref={scrollRef}
+        hidden={guideOpen}
         role="log"
         aria-label={msg("chat.panel.log")}
         aria-live="polite"
         className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3"
       >
         {messages.length === 0 ? (
-          <EmptyState hasOpenProject={hasOpenProject} />
+          <EmptyState hasOpenProject={hasOpenProject} onOpenGuide={() => setGuideOpen(true)} />
         ) : (
           messages.map((m, index) => (
             <ChatMessage
@@ -230,9 +273,11 @@ export function ChatPanel({
           ))
         )}
 
+        {planPending && <PlanCard />}
+
         {pendingConfirm && <InlineConfirmCard call={pendingConfirm.call} />}
 
-        {!busy && !error && messages.at(-1)?.role === "assistant" && <NextSteps />}
+        {!busy && !error && !planPending && lastMessage?.role === "assistant" && <NextSteps />}
 
         {error && (
           <ChatErrorCard

@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { logEvent } from "../hawsh/logger";
 
 type EventProperties = Record<string, string | number | boolean | null>;
 
@@ -25,6 +26,8 @@ export function useAnalytics() {
   const track = useCallback(
     (event: string, properties?: EventProperties) => {
       void getAnalyticsClient().then((client) => client?.capture(event, properties));
+      // Hawsh Khalifa build: the owner's own usage log (src/hawsh/logger.ts).
+      logEvent("usage", { event, ...properties });
     },
     [],
   );

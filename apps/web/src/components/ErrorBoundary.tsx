@@ -1,4 +1,5 @@
 import React from "react";
+import { logError } from "../hawsh/logger";
 import { ToolcraftButton as Button } from "@openreel/ui";
 import { ToolcraftText as Text } from "@openreel/ui";
 
@@ -28,6 +29,7 @@ export class ErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
     console.error("[ErrorBoundary] Component error:", error, errorInfo);
+    logError("react", error, { component: errorInfo.componentStack?.split("\n").slice(0, 6).join("\n") });
     this.props.onError?.(error, errorInfo);
   }
 

@@ -6,6 +6,7 @@ import type { ToolCall } from "@openreel/agent";
 import { useChatStore } from "../../../stores/chat-store";
 import { toolLabel } from "./tool-labels";
 import { msg } from "../../../hawsh/i18n/messages";
+import { SIMPLE_EDITOR } from "../../../hawsh/simple";
 
 export function InlineConfirmCard({ call }: { call: ToolCall }): JSX.Element {
   const resolveConfirm = useChatStore((s) => s.resolveConfirm);
@@ -27,7 +28,7 @@ export function InlineConfirmCard({ call }: { call: ToolCall }): JSX.Element {
           {note}
         </Text>
       )}
-      {argKeys.length > 0 && (
+      {!SIMPLE_EDITOR && argKeys.length > 0 && (
         <pre dir="ltr" className="mb-2 max-h-32 text-start overflow-auto whitespace-pre-wrap break-words rounded bg-bg-2 p-1.5 font-mono text-[10px] text-fg-2">
           {JSON.stringify(call.args, null, 2)}
         </pre>
