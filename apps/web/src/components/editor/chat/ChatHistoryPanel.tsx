@@ -5,6 +5,13 @@ import { MessageSquareText, Plus, Trash2 } from "@/icons/lucide-compat";
 import { useChatHistoryStore } from "../../../stores/chat-history-store";
 import { useChatStore } from "../../../stores/chat-store";
 
+/** "طلب واحد" / "طلبان" / "5 طلبات" / "12 طلباً". */
+export function requestsLabel(n: number): string {
+  if (n === 1) return "طلب واحد";
+  if (n === 2) return "طلبان";
+  return `${n} ${n >= 3 && n <= 10 ? "طلبات" : "طلباً"}`;
+}
+
 function formatUpdatedAt(timestamp: number): string {
   const date = new Date(timestamp);
   const now = new Date();
@@ -84,7 +91,7 @@ export function ChatHistoryPanel({
               return (
                 <div
                   key={conversation.id}
-                  className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${
+                  className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-start transition-colors ${
                     active
                       ? "bg-accent-soft text-fg"
                       : "text-fg-2 hover:bg-hover hover:text-fg"
@@ -96,7 +103,7 @@ export function ChatHistoryPanel({
                       openConversation(conversation.id);
                       onClose();
                     }}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    className="flex min-w-0 flex-1 items-center gap-2 text-start"
                   >
                     <MessageSquareText
                       size={13}
@@ -104,16 +111,16 @@ export function ChatHistoryPanel({
                       aria-hidden
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[11px] font-medium">
+                      <span dir="auto" className="block truncate text-start text-[11px] font-medium">
                         {conversation.title}
                       </span>
                       <span className="mt-0.5 block text-[9px] text-fg-muted">
-                        {conversation.messages.filter((message) => message.role === "user").length} requests · {formatUpdatedAt(conversation.updatedAt)}
+                        {requestsLabel(conversation.messages.filter((message) => message.role === "user").length)} · {formatUpdatedAt(conversation.updatedAt)}
                       </span>
                     </span>
                   </button>
                   <IconButton
-                    label={`Delete ${conversation.title}`}
+                    label={`حذف ${conversation.title}`}
                     icon={<Trash2 size={12} aria-hidden />}
                     size="sm"
                     variant="ghost"

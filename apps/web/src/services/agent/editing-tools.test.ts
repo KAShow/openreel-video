@@ -40,6 +40,7 @@ describe("browser AI media and effect tools", () => {
       expect(tool.description).not.toContain("list_motion_shaders");
     }
     expect(EDITING_SYSTEM).toContain("mediaId is not a clipId");
+    expect(EDITING_SYSTEM).toContain("write every reply in Arabic");
   });
 
   it("publishes the same per-effect schemas used by validation", async () => {

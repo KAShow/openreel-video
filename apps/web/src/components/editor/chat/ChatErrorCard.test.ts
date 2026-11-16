@@ -8,7 +8,7 @@ describe("formatChatError", () => {
         'openai-compatible 401: {"error":{"message":"The API key is invalid"}}',
       ),
     ).toMatchObject({
-      title: "Authentication failed",
+      title: "فشلت المصادقة",
       message: "The API key is invalid",
       action: "ai-editor",
     });
@@ -20,21 +20,34 @@ describe("formatChatError", () => {
         "Could not reach the compatible endpoint. Check browser CORS settings.",
       ),
     ).toMatchObject({
-      title: "Couldn’t reach the endpoint",
+      title: "تعذّر الوصول إلى الخدمة",
       action: "ai-editor",
     });
   });
 
   it("offers a new chat when the context window is exhausted", () => {
     expect(formatChatError("maximum context length exceeded")).toMatchObject({
-      title: "Conversation is too long",
+      title: "المحادثة طويلة جداً",
       action: "new-chat",
+    });
+  });
+
+  it("treats a Director's Eyes session expiry as its own case", () => {
+    expect(formatChatError("انتهى الدخول — افتح المحرر من جديد من عيون المخرج.")).toMatchObject({
+      title: "انتهت الجلسة",
+      action: null,
+    });
+  });
+
+  it("treats a Director's Eyes network failure as an endpoint problem", () => {
+    expect(formatChatError("تعذّر الاتصال بعيون المخرج. تحقق من الاتصال وحاول مرة أخرى.")).toMatchObject({
+      title: "تعذّر الوصول إلى الخدمة",
     });
   });
 
   it("keeps an unknown error readable", () => {
     expect(formatChatError("provider unavailable")).toEqual({
-      title: "AI request failed",
+      title: "تعذّر تنفيذ الطلب",
       message: "provider unavailable",
       action: null,
       details: undefined,

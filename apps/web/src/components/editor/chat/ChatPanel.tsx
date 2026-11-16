@@ -16,10 +16,10 @@ import { EditSharingPanel } from "./EditSharingPanel";
 import { useAIConnectionStore } from "../../../stores/ai-connection-store";
 
 const SUGGESTIONS: ReadonlyArray<string> = [
-  "Add a title that says 'Welcome' for the first 3 seconds",
-  "Trim 2 seconds off the end of the first clip",
-  "Add a fade-in to the opening clip",
-  "List everything currently on my timeline",
+  "أضف عنواناً نصه «مرحباً» في أول 3 ثوانٍ",
+  "اقتطع ثانيتين من نهاية أول مقطع",
+  "أضف تلاشياً تدريجياً في بداية أول مقطع",
+  "اعرض كل ما على الخط الزمني",
 ];
 
 function EmptyState({
@@ -55,7 +55,7 @@ function EmptyState({
               variant="ghost"
               size="sm"
               onClick={() => void send(s)}
-              className="w-full rounded-md border border-border bg-bg-1/60 px-2.5 py-1.5 text-left text-[11px] text-fg-2 transition-colors hover:border-accent/50 hover:bg-hover hover:text-fg"
+              className="w-full rounded-md border border-border bg-bg-1/60 px-2.5 py-1.5 text-start text-[11px] text-fg-2 transition-colors hover:border-accent/50 hover:bg-hover hover:text-fg"
             />
           ))}
         </div>
@@ -103,7 +103,7 @@ export function ChatPanel({
   }, [projectId, setProjectContext]);
 
   return (
-    <div className="relative flex h-full flex-col bg-bg-1">
+    <div dir="rtl" className="relative flex h-full flex-col bg-bg-1">
       <header className="flex items-center gap-2 border-b border-border px-3 py-2">
         <Bot size={15} className="shrink-0 text-accent" />
         <span className="shrink-0 text-[13px] font-medium text-fg">
@@ -111,13 +111,13 @@ export function ChatPanel({
         </span>
         {totalTokens > 0 && (
           <span
-            title={`${usage.inputTokens} in · ${usage.outputTokens} out`}
+            title={`${usage.inputTokens} إدخال · ${usage.outputTokens} إخراج`}
             className="shrink-0 rounded bg-bg-2 px-1.5 py-0.5 text-[10px] tabular-nums text-fg-muted"
           >
-            {tokenLabel} tok
+            {tokenLabel} رمز
           </span>
         )}
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ms-auto flex items-center gap-1">
           <IconButton
             label="AI settings"
             icon={<Settings size={14} aria-hidden />}
@@ -185,7 +185,7 @@ export function ChatPanel({
       <div
         ref={scrollRef}
         role="log"
-        aria-label="AI conversation and edit results"
+        aria-label="المحادثة ونتائج التعديل"
         aria-live="polite"
         className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3"
       >

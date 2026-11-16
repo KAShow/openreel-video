@@ -41,9 +41,9 @@ export function ChatComposer(): JSX.Element {
           onKeyDown={onKeyDown}
           rows={2}
           placeholder="Ask the AI to edit your video…"
-          inputClassName="block w-full resize-none bg-transparent px-3 py-2 pr-11 text-[13px] text-fg outline-none placeholder:text-fg-muted"
+          inputClassName="block w-full resize-none bg-transparent px-3 py-2 pe-11 text-[13px] text-fg outline-none placeholder:text-fg-muted"
         />
-        <div className="absolute bottom-1.5 right-1.5">
+        <div className="absolute bottom-1.5 end-1.5">
           {busy ? (
             <IconButton
               label="Stop"
@@ -56,7 +56,7 @@ export function ChatComposer(): JSX.Element {
           ) : (
             <IconButton
               label="Send"
-              icon={<Send size={12} aria-hidden />}
+              icon={<Send size={12} aria-hidden className="rtl:-scale-x-100" />}
               size="sm"
               variant="primary"
               onClick={submit}
@@ -67,7 +67,7 @@ export function ChatComposer(): JSX.Element {
         </div>
       </div>
       <div className="mt-1 px-1 text-[10px] text-fg-muted">
-        Enter to send · Shift+Enter for a new line
+        اضغط Enter للإرسال · Shift+Enter لسطر جديد
       </div>
       <AIPriceNote />
     </div>

@@ -1,0 +1,67 @@
+/**
+ * Arabic names for the editing tools the AI Editor can call (EDIT_TOOL_SCHEMAS in
+ * services/agent/editing-tools.ts). The tool name itself is what the model sees and must stay as it
+ * is; this only changes what the chat shows. Unknown names fall back to the raw name.
+ */
+const LABELS: Readonly<Record<string, string>> = {
+  get_editor_state: "قراءة حالة المحرر",
+  list_tracks: "عرض المسارات",
+  list_clips: "عرض المقاطع",
+  get_clip: "قراءة بيانات مقطع",
+  get_transition_options: "عرض خيارات الانتقال",
+  inspect_media: "فحص ملف وسائط",
+  list_media: "عرض الوسائط",
+  list_text_clips: "عرض النصوص",
+  update_project_settings: "تعديل إعدادات المشروع",
+  add_track: "إضافة مسار",
+  rename_track: "إعادة تسمية مسار",
+  reorder_track: "إعادة ترتيب المسارات",
+  hide_track: "إخفاء مسار أو إظهاره",
+  mute_track: "كتم مسار أو إلغاء كتمه",
+  add_clip: "إضافة مقطع",
+  remove_clip: "حذف مقطع",
+  move_clip: "نقل مقطع",
+  trim_clip: "قص مقطع",
+  split_clip: "تقسيم مقطع",
+  set_clip_speed: "تغيير سرعة مقطع",
+  set_clip_reverse: "عكس اتجاه مقطع",
+  set_clip_pitch_correction: "تصحيح طبقة الصوت",
+  set_clip_transform: "تعديل موضع مقطع وحجمه",
+  set_clip_volume: "ضبط مستوى الصوت",
+  set_clip_fade: "ضبط التلاشي",
+  add_video_effect: "إضافة مؤثر فيديو",
+  remove_video_effect: "إزالة مؤثر فيديو",
+  update_video_effect: "تعديل مؤثر فيديو",
+  toggle_video_effect: "تشغيل مؤثر فيديو أو إيقافه",
+  add_audio_effect: "إضافة مؤثر صوت",
+  update_audio_effect: "تعديل مؤثر صوت",
+  remove_audio_effect: "إزالة مؤثر صوت",
+  toggle_audio_effect: "تشغيل مؤثر صوت أو إيقافه",
+  add_subtitle: "إضافة ترجمة",
+  update_subtitle: "تعديل ترجمة",
+  remove_subtitle: "حذف ترجمة",
+  create_text_clip: "إنشاء نص",
+  update_text_clip: "تعديل نص",
+  set_text_timing: "ضبط توقيت نص",
+  remove_text_clip: "حذف نص",
+  add_keyframe: "إضافة إطار مفتاحي",
+  remove_keyframe: "حذف إطار مفتاحي",
+  set_clip_keyframes: "ضبط الإطارات المفتاحية",
+  add_transition: "إضافة انتقال",
+  update_transition: "تعديل انتقال",
+  remove_transition: "حذف انتقال",
+  add_marker: "إضافة علامة",
+  remove_marker: "حذف علامة",
+  update_marker: "تعديل علامة",
+  apply_edit_preset: "تطبيق إعداد جاهز",
+  inspect_preview: "فحص المعاينة",
+  detect_silence: "كشف فترات الصمت",
+  cut_silence: "قص فترات الصمت",
+  get_capabilities: "قراءة إمكانات المحرر",
+  open_export: "فتح نافذة التصدير",
+};
+
+/** Arabic name for a tool, or null when the tool has no label yet. */
+export function toolLabel(name: string): string | null {
+  return LABELS[name] ?? null;
+}
