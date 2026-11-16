@@ -31,6 +31,13 @@ export interface RunTurnInput {
   /** Closed tool catalog and atomic policy used by the browser AI workspace. */
   readonly execute?: (name: string, args: Record<string, unknown>, host: EditingHost) => Promise<ToolResult>;
   readonly readOnly?: (name: string) => boolean;
+  /**
+   * Extra tools that must pass confirmGate, on top of the registry's destructive
+   * and expensive tools: a host's own tools are not in the registry (e.g. one that
+   * spends credits). Same rules as the built-in check: skipped in dry-run and
+   * after "approve_for_turn".
+   */
+  readonly requiresConfirmation?: (name: string) => boolean;
   readonly atomic?: boolean;
   readonly signal?: AbortSignal;
 }
@@ -227,7 +234,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         const needsConfirm =
           !dryRun &&
           !approveAll &&
-          (isDestructive(call.name) || isExpensive(call.name));
+          (isDestructive(call.name) || isExpensive(call.name) || input.requiresConfirmation?.(call.name) === true);
         if (needsConfirm && confirmGate) {
           emit({ type: "awaiting_confirmation", call });
           const decision = await confirmGate(call);

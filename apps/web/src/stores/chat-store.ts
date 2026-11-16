@@ -15,7 +15,8 @@ import { HAWSH_AI_ONLY_MESSAGE, isHawshAI, makeHawshAIClient } from "../hawsh/ai
 import { turnCost, type ChatTurnCost } from "../hawsh/ai-cost";
 import { msg } from "../hawsh/i18n/messages";
 import { EditingSession } from "../services/agent/editing-session";
-import { editingToolDefs, editingToolReadOnly, executeEditingTool, EDITING_SYSTEM } from "../services/agent/editing-tools";
+import { editingToolDefs, editingToolNeedsConfirm, editingToolReadOnly, executeEditingTool, EDITING_SYSTEM } from "../services/agent/editing-tools";
+import { transcribeChargeNotice, transcribeConfirmNote, transcribePointsCharged } from "../hawsh/transcribe-tool";
 import { useAIConnectionStore } from "./ai-connection-store";
 import {
   conversationTitle,
@@ -49,6 +50,8 @@ export interface ChatMessage {
 interface PendingConfirm {
   readonly call: ToolCall;
   readonly resolve: (decision: ConfirmDecision) => void;
+  /** Extra line for the card, e.g. the points a transcription will cost (Hawsh Khalifa build). */
+  readonly note?: string;
 }
 
 export interface TokenUsage {
@@ -279,6 +282,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const tools = editingToolDefs(provider === "anthropic" ? "anthropic" : "openai");
     const autoConfirm = useSettingsStore.getState().agentAutoConfirm;
     const dryRun = useSettingsStore.getState().agentDryRun;
+    const pointsBefore = transcribePointsCharged();
 
     let result;
     try { result = await runExclusive(() =>
@@ -290,16 +294,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: get().conversation,
         execute: executeEditingTool,
         readOnly: editingToolReadOnly,
+        requiresConfirmation: editingToolNeedsConfirm,
         atomic: true,
         signal: controller.signal,
         dryRun,
         confirmGate: autoConfirm
           ? () => "approve_for_turn"
-          : (call) =>
-              new Promise<ConfirmDecision>((resolve) => {
+          : async (call) => {
+              const note = await transcribeConfirmNote(call, host);
+              return new Promise<ConfirmDecision>((resolve) => {
                 if (controller.signal.aborted) { resolve("reject"); return; }
-                set({ status: "awaiting_confirm", pendingConfirm: { call, resolve } });
-              }),
+                set({ status: "awaiting_confirm", pendingConfirm: { call, resolve, note } });
+              });
+            },
         onEvent,
         turnLabel: msg("chat.turn.undoLabel"),
       }),
@@ -308,7 +315,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (activeSeq !== seq) return;
       // A failed turn still costs the steps the server charged before it failed.
       const cost = spent();
-      if (cost) updateAssistant((m) => ({ ...m, cost }));
+      // Transcription points spent before the failure are lost with the discarded draft: say so.
+      const chargedNotice = transcribeChargeNotice(transcribePointsCharged() - pointsBefore);
+      if (cost || chargedNotice) updateAssistant((m) => ({ ...m, ...(cost ? { cost } : {}), ...(chargedNotice ? { notice: chargedNotice } : {}) }));
       set({ status: controller.signal.aborted ? "idle" : "error", error: controller.signal.aborted ? null : error instanceof Error ? error.message : msg("chat.error.turnFailed"), abortController: null, pendingConfirm: null, conversation: [] });
       saveConversationSnapshot(get()); return;
     }
@@ -334,10 +343,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ? msg("chat.turn.noSummary")
               : msg("chat.turn.empty")
             : undefined;
+        // Points spent on a transcription are not refunded when the turn is discarded: say so.
+        const chargedNotice = result.committed ? undefined : transcribeChargeNotice(transcribePointsCharged() - pointsBefore);
         return {
           ...message,
           text: finalText,
-          notice: stopNotice ?? emptyNotice,
+          notice: chargedNotice ?? stopNotice ?? emptyNotice,
           cost: spent(),
           toolCalls: message.toolCalls.map((tc) => !result.committed && tc.status === "retrying" ? { ...tc, status: "error" } : tc),
         };

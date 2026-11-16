@@ -67,6 +67,8 @@ export class EditingSession implements EditingHost {
   async rollbackTransaction(): Promise<void> { this.hasChanges = false; this.exportRequested = false; }
   async runJob() { return { ok: false, error: "This job is unavailable in the local AI workspace" }; }
   requestExport(): void { this.exportRequested = true; }
+  /** Hawsh Khalifa build: caption text carries clip metadata the portable edit format cannot hold (src/hawsh/transcribe-tool.ts). Every action is still validated by the executor. */
+  allowNonPortableDraft(): void { this.portable = false; }
   replaceDraft(project: Project): void { this.draft = project; this.hasChanges = true; }
   async relinkMedia(mediaId: string, file: File): Promise<void> {
     const old = this.draft.mediaLibrary.items.find((m) => m.id === mediaId);
