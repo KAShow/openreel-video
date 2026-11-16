@@ -5,10 +5,8 @@
 import React, { useEffect, useState } from "react";
 import { useAIConnectionStore } from "../stores/ai-connection-store";
 import { isHawshAI } from "./ai";
+import { getStepPrice, hasLoadedStepPrice, setStepPrice } from "./ai-cost";
 import { hawshClient, useHawshStore } from "./session";
-
-const DEFAULT_PRICE = 0.1;
-let cached: number | null = null;
 
 /** Arabic count of points: "0.1 نقطة". */
 export function priceNote(points: number): string {
@@ -19,15 +17,16 @@ export function priceNote(points: number): string {
 export const AIPriceNote: React.FC = () => {
   const onHawsh = useAIConnectionStore((s) => isHawshAI(s.baseUrl));
   const ready = useHawshStore((s) => s.status === "ready");
-  const [price, setPrice] = useState<number>(cached ?? DEFAULT_PRICE);
+  const [price, setPrice] = useState<number>(getStepPrice());
 
   useEffect(() => {
-    if (!onHawsh || !ready || cached !== null) return;
+    if (!onHawsh || !ready || hasLoadedStepPrice()) return;
     const c = hawshClient();
     if (!c) return;
     void c.from("director_prices").select("value").eq("key", "editor_ai_call").maybeSingle().then(({ data }) => {
       const v = Number((data as { value?: unknown } | null)?.value);
-      if (Number.isFinite(v) && v >= 0) { cached = v; setPrice(v); }
+      // Shared with chat-store, which prices each finished request with it (ai-cost.ts).
+      if (Number.isFinite(v) && v >= 0) { setStepPrice(v); setPrice(v); }
     });
   }, [onHawsh, ready]);
 

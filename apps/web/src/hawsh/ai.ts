@@ -32,8 +32,13 @@ async function serverMessage(res: Response): Promise<string> {
   return `Director's Eyes AI returned HTTP ${res.status}.`;
 }
 
-/** LLM client for the agent loop that sends each step to editor-ai with a fresh session token. */
-export function makeHawshAIClient(signal?: AbortSignal): LLMClient {
+/**
+ * LLM client for the agent loop that sends each step to editor-ai with a fresh session token.
+ * `onCharged` fires once per successful (HTTP 2xx) reply — the calls the server charged. Refused
+ * calls (402 no points, 429 day limit) and provider failures (502–504, refunded on the server and
+ * retried once here) are not counted, so a retried step counts once.
+ */
+export function makeHawshAIClient(signal?: AbortSignal, onCharged?: () => void): LLMClient {
   const send = withRetry(async (body: unknown) => {
     signal?.throwIfAborted();
     const c = hawshClient();
@@ -51,6 +56,7 @@ export function makeHawshAIClient(signal?: AbortSignal): LLMClient {
       throw new Error("تعذّر الاتصال بعيون المخرج. تحقق من الاتصال وحاول مرة أخرى.");
     }
     if (!res.ok) throw new LLMHttpError(await serverMessage(res), res.status, parseRetryAfterMs(res.headers.get("retry-after")));
+    onCharged?.();
     const raw: unknown = await res.json().catch(() => null);
     if (!raw || typeof raw !== "object" || !("choices" in raw)) throw new Error("ردّ غير متوقع من عيون المخرج. حاول مرة أخرى.");
     return raw;

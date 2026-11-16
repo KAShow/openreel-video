@@ -86,6 +86,13 @@ export const MESSAGES = {
   "chat.code.copy": "نسخ الكود",
   "chat.code.copied": "تم نسخ الكود",
 
+  // ── AI assistant: points a request consumed ───────────────────────────────
+  "chat.cost.line": "استهلك هذا الطلب {points} نقطة ({steps})",
+  "chat.cost.steps.one": "خطوة واحدة",
+  "chat.cost.steps.two": "خطوتان",
+  "chat.cost.steps.few": "{n} خطوات",
+  "chat.cost.steps.many": "{n} خطوة",
+
   // ── AI assistant: edit JSON and presets panel ─────────────────────────────
   "share.error.generic": "تعذّرت مشاركة التعديل",
   "share.error.chooseClip": "اختر مقطعاً أولاً",

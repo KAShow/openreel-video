@@ -10,7 +10,10 @@ const h = vi.hoisted(() => ({
   getSecret: vi.fn(async () => "test-key"),
   isSessionUnlocked: vi.fn(() => true),
   makeBYOKClient: vi.fn(() => ({ complete: vi.fn() })),
-  makeHawshClient: vi.fn(() => ({ complete: vi.fn() })),
+  // Each complete() stands for one model call the server charged (makeHawshAIClient's onCharged).
+  makeHawshClient: vi.fn((_signal?: AbortSignal, onCharged?: () => void) => ({
+    complete: vi.fn(async () => { onCharged?.(); return { text: "", toolUses: [], stopReason: "end_turn" as const }; }),
+  })),
   undo: vi.fn(async () => ({ success: true })),
   projectState: { hasOpenProject: true, projectId: "project-a" },
   undoStackSize: 0,
@@ -133,6 +136,71 @@ describe("chat-store", () => {
     expect(h.makeHawshClient).toHaveBeenCalledOnce();
     expect(h.makeBYOKClient).not.toHaveBeenCalled();
     expect(h.runTurn).toHaveBeenCalledOnce();
+  });
+
+  describe("points a request consumed", () => {
+    const steps = async (llm: RunTurnInput["llm"], n: number): Promise<void> => {
+      for (let i = 0; i < n; i++) await llm.complete({ messages: [], tools: [] });
+    };
+
+    it("puts the charged steps and points on the assistant message, not in the conversation", async () => {
+      h.runTurn.mockImplementation(impl(async ({ llm, messages }) => {
+        await steps(llm, 3);
+        return { text: "Done", messages: [...messages, { role: "assistant", content: "Done", toolUses: [] }], toolCalls: 2, stoppedReason: "end_turn", committed: true };
+      }));
+      await store().send("trim the intro");
+      expect(store().messages.at(-1)?.cost).toEqual({ steps: 3, points: 0.3 });
+      expect(store().messages[0].cost).toBeUndefined();
+      expect(JSON.stringify(store().conversation)).not.toContain("points");
+      expect(useChatHistoryStore.getState().conversations[0].messages.at(-1)?.cost).toEqual({ steps: 3, points: 0.3 });
+    });
+
+    it("shows nothing when no step was charged", async () => {
+      h.runTurn.mockImplementation(impl(async ({ messages }) => ({ text: "ok", messages, toolCalls: 0, stoppedReason: "end_turn", committed: true })));
+      await store().send("hello");
+      expect(store().messages.at(-1)?.cost).toBeUndefined();
+    });
+
+    it("counts each turn on its own", async () => {
+      h.runTurn
+        .mockImplementationOnce(impl(async ({ llm, messages }) => { await steps(llm, 2); return { text: "a", messages, toolCalls: 0, stoppedReason: "end_turn", committed: true }; }))
+        .mockImplementationOnce(impl(async ({ llm, messages }) => { await steps(llm, 1); return { text: "b", messages, toolCalls: 0, stoppedReason: "end_turn", committed: true }; }));
+      await store().send("one");
+      await store().send("two");
+      const costs = store().messages.filter((m) => m.role === "assistant").map((m) => m.cost);
+      expect(costs).toEqual([{ steps: 2, points: 0.2 }, { steps: 1, points: 0.1 }]);
+    });
+
+    it("still shows the cost of a failed or thrown turn", async () => {
+      h.runTurn.mockImplementationOnce(impl(async ({ llm, messages }) => {
+        await steps(llm, 2);
+        return { text: "", messages, toolCalls: 1, stoppedReason: "error", committed: false };
+      }));
+      await store().send("break it");
+      expect(store().messages.at(-1)?.cost).toEqual({ steps: 2, points: 0.2 });
+
+      h.runTurn.mockImplementationOnce(async ({ llm }: RunTurnInput) => {
+        await steps(llm, 1);
+        throw new Error("provider unavailable");
+      });
+      await store().send("again");
+      expect(store().status).toBe("error");
+      expect(store().messages.at(-1)?.cost).toEqual({ steps: 1, points: 0.1 });
+    });
+
+    it("still shows the cost of a cancelled turn", async () => {
+      h.runTurn.mockImplementation(impl(async ({ llm, confirmGate, messages }) => {
+        await steps(llm, 1);
+        await confirmGate!({ id: "t1", name: "deleteClip", args: {} });
+        return { text: "", messages, toolCalls: 1, stoppedReason: "error", committed: false };
+      }));
+      const pending = store().send("delete it");
+      await flush();
+      store().stop();
+      await pending;
+      expect(store().messages.at(-1)?.text).toContain("أُلغي الطلب");
+      expect(store().messages.at(-1)?.cost).toEqual({ steps: 1, points: 0.1 });
+    });
   });
 
   it("ignores empty input", async () => {

@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import { Bot, User } from "@/icons/lucide-compat";
 import type { ChatMessage as ChatMessageData } from "../../../stores/chat-store";
+import { costLabel } from "../../../hawsh/ai-cost";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { ToolCallCard } from "./ToolCallCard";
 
@@ -46,6 +47,11 @@ export function ChatMessage({
         {!isUser && message.notice && (
           <div dir="auto" className="rounded-md border border-border bg-bg-2/70 px-2.5 py-2 text-[11px] leading-relaxed text-fg-2">
             {message.notice}
+          </div>
+        )}
+        {!isUser && message.cost && (
+          <div dir="rtl" className="text-[10px] text-fg-muted">
+            {costLabel(message.cost)}
           </div>
         )}
       </div>
