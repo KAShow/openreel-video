@@ -24,7 +24,7 @@ export function ChatMessage({
       </div>
       <div className="min-w-0 flex-1 space-y-2">
         {message.text && (isUser ? (
-          <div className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-fg">
+          <div dir="auto" className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-fg">
             {message.text}
           </div>
         ) : (
@@ -44,7 +44,7 @@ export function ChatMessage({
           </div>
         )}
         {!isUser && message.notice && (
-          <div className="rounded-md border border-border bg-bg-2/70 px-2.5 py-2 text-[11px] leading-relaxed text-fg-2">
+          <div dir="auto" className="rounded-md border border-border bg-bg-2/70 px-2.5 py-2 text-[11px] leading-relaxed text-fg-2">
             {message.notice}
           </div>
         )}

@@ -35,7 +35,7 @@ function extractUpstreamMessage(raw: string): string | null {
 }
 
 export function formatChatError(rawError: string): ChatErrorPresentation {
-  const raw = rawError.trim() || "The AI request failed.";
+  const raw = rawError.trim() || "تعذّر تنفيذ طلب المساعد.";
   const upstream = extractUpstreamMessage(raw);
   const status = Number(raw.match(/\b([45]\d{2})\b/)?.[1] ?? 0);
   const searchable = `${raw} ${upstream ?? ""}`.toLowerCase();
@@ -49,38 +49,47 @@ export function formatChatError(rawError: string): ChatErrorPresentation {
     )
   ) {
     return {
-      title: "Authentication failed",
+      title: "فشلت المصادقة",
       message:
         upstream ??
-        "The endpoint rejected the API key. Check the session key and try again.",
+        "رفضت الخدمة مفتاح الواجهة. تحقق من مفتاح الجلسة وحاول مرة أخرى.",
       action: "ai-editor",
-      actionLabel: "Check API key",
+      actionLabel: "التحقق من المفتاح",
+      details,
+    };
+  }
+
+  if (/انتهى الدخول/.test(searchable)) {
+    return {
+      title: "انتهت الجلسة",
+      message: upstream ?? raw,
+      action: null,
       details,
     };
   }
 
   if (status === 429 || /rate limit|too many requests|quota/.test(searchable)) {
     return {
-      title: "Rate limit reached",
+      title: "بلغت حدّ الطلبات",
       message:
         upstream ??
-        "The endpoint is receiving too many requests. Wait a moment and try again.",
+        "الخدمة تتلقى طلبات كثيرة. انتظر قليلاً ثم حاول مرة أخرى.",
       action: null,
       details,
     };
   }
 
   if (
-    /cors|failed to fetch|network error|could not reach|connection refused|load failed/.test(
+    /cors|failed to fetch|network error|could not reach|connection refused|load failed|تعذّر الاتصال/.test(
       searchable,
     )
   ) {
     return {
-      title: "Couldn’t reach the endpoint",
+      title: "تعذّر الوصول إلى الخدمة",
       message:
-        "Check the host URL and confirm the endpoint is online. In a browser, the host must also allow CORS requests from OpenReel.",
+        "تحقق من عنوان الخدمة وتأكد أنها تعمل. وفي المتصفح يجب أن تسمح الخدمة بطلبات CORS من OpenReel.",
       action: "ai-editor",
-      actionLabel: "Check endpoint",
+      actionLabel: "التحقق من العنوان",
       details: raw,
     };
   }
@@ -91,24 +100,24 @@ export function formatChatError(rawError: string): ChatErrorPresentation {
     )
   ) {
     return {
-      title: "Conversation is too long",
+      title: "المحادثة طويلة جداً",
       message:
         upstream ??
-        "This model cannot fit the full conversation. Start a new chat and continue there.",
+        "لا يتسع النموذج لكامل المحادثة. ابدأ محادثة جديدة وأكمل فيها.",
       action: "new-chat",
-      actionLabel: "Start new chat",
+      actionLabel: "بدء محادثة جديدة",
       details,
     };
   }
 
   if (status === 404 || /model.+not found|unknown model|does not exist/.test(searchable)) {
     return {
-      title: "Model or route not found",
+      title: "النموذج أو المسار غير موجود",
       message:
         upstream ??
-        "Check that the base URL and model ID match what the endpoint exposes.",
+        "تحقق أن العنوان الأساسي ومعرّف النموذج يطابقان ما تقدمه الخدمة.",
       action: "ai-editor",
-      actionLabel: "Check endpoint",
+      actionLabel: "التحقق من العنوان",
       details,
     };
   }
@@ -120,16 +129,16 @@ export function formatChatError(rawError: string): ChatErrorPresentation {
   ) {
     const keyIssue = /secure storage|unlock|api key/.test(searchable);
     return {
-      title: "AI setup needed",
+      title: "الإعداد مطلوب",
       message: upstream ?? raw,
       action: "ai-editor",
-      actionLabel: keyIssue ? "Check API key" : "Open AI settings",
+      actionLabel: keyIssue ? "التحقق من المفتاح" : "فتح إعدادات المساعد",
       details,
     };
   }
 
   return {
-    title: "AI request failed",
+    title: "تعذّر تنفيذ الطلب",
     message: upstream ?? raw,
     action: null,
     details,
@@ -167,7 +176,7 @@ export function ChatErrorCard({
           </div>
         </div>
         <IconButton
-          label="Dismiss error"
+          label="إغلاق الخطأ"
           icon={<X size={13} aria-hidden />}
           size="sm"
           variant="ghost"
@@ -179,7 +188,7 @@ export function ChatErrorCard({
       {presentation.details && (
         <details className="group mt-2 rounded-lg bg-bg-2/70 px-2.5 py-2">
           <summary className="cursor-pointer select-none text-[10px] font-medium text-fg-muted hover:text-fg-2">
-            Technical details
+            تفاصيل تقنية
           </summary>
           <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-relaxed text-fg-muted">
             {presentation.details}
@@ -189,7 +198,7 @@ export function ChatErrorCard({
 
       {presentation.action && (
         <Button
-          label={presentation.actionLabel ?? "Fix issue"}
+          label={presentation.actionLabel ?? "إصلاح المشكلة"}
           variant="secondary"
           size="sm"
           onClick={() => {

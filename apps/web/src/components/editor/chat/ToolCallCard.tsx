@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ToolcraftButton as Button } from "@openreel/ui";
 import { ChevronRight, Loader2, Check, X, Ban, Wrench } from "@/icons/lucide-compat";
 import type { ToolCallView } from "../../../stores/chat-store";
+import { toolLabel } from "./tool-labels";
 
 const STATUS_META: Record<
   ToolCallView["status"],
@@ -11,32 +12,32 @@ const STATUS_META: Record<
   running: {
     icon: <Loader2 size={12} className="animate-spin" />,
     tint: "text-fg-2",
-    label: "Running",
+    label: "جارٍ التنفيذ",
   },
   done: {
     icon: <Check size={12} />,
     tint: "text-status-success",
-    label: "Done",
+    label: "تم",
   },
   retrying: {
     icon: <Wrench size={12} />,
     tint: "text-status-warning",
-    label: "Correcting",
+    label: "جارٍ التصحيح",
   },
   corrected: {
     icon: <Check size={12} />,
     tint: "text-fg-muted",
-    label: "Corrected",
+    label: "صُحّح",
   },
   error: {
     icon: <X size={12} />,
     tint: "text-status-error",
-    label: "Failed",
+    label: "فشل",
   },
   rejected: {
     icon: <Ban size={12} />,
     tint: "text-fg-muted",
-    label: "Skipped",
+    label: "تم التخطي",
   },
 };
 
@@ -53,31 +54,50 @@ function previewArgs(args: Record<string, unknown>): string {
     .join(", ");
 }
 
+/** One Arabic sentence for the outcome; the tool's own (English) summary stays in the technical block. */
+function outcomeText(status: ToolCallView["status"], label: string): string {
+  switch (status) {
+    case "done":
+      return `تم تنفيذ «${label}» بنجاح.`;
+    case "corrected":
+      return `أخطأ النموذج في «${label}» ثم صحّحه.`;
+    case "retrying":
+      return `«${label}» يحتاج تصحيحاً، وسيحاول النموذج مرة أخرى.`;
+    case "rejected":
+      return `تم تخطي «${label}» بقرارك.`;
+    case "running":
+      return `جارٍ تنفيذ «${label}»…`;
+    default:
+      return `تعذّر تنفيذ «${label}».`;
+  }
+}
+
 export function ToolCallCard({ call }: { call: ToolCallView }): JSX.Element {
   const [open, setOpen] = useState(false);
   const meta = STATUS_META[call.status];
+  const label = toolLabel(call.name) ?? call.name;
   const hasDetail =
     Object.keys(call.args ?? {}).length > 0 || call.result !== undefined;
 
   return (
     <div className="rounded-md border border-border bg-bg-1/60 text-[11px]">
       <Button
-        label={`${call.name} ${meta.label}`}
+        label={`${label} — ${meta.label}`}
         variant="ghost"
         isDisabled={!hasDetail}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left disabled:cursor-default"
+        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-start disabled:cursor-default"
       >
         {hasDetail ? (
           <ChevronRight
             size={12}
-            className={`shrink-0 text-fg-muted transition-transform ${open ? "rotate-90" : ""}`}
+            className={`shrink-0 text-fg-muted transition-transform ${open ? "rotate-90" : "rtl:rotate-180"}`}
           />
         ) : (
           <Wrench size={12} className="shrink-0 text-fg-muted" />
         )}
-        <span className="font-mono text-fg">{call.name}</span>
-        <span className={`ml-auto flex items-center gap-1 ${meta.tint}`}>
+        <span className="text-fg">{label}</span>
+        <span className={`ms-auto flex items-center gap-1 ${meta.tint}`}>
           {meta.icon}
           <span className="text-[10px]">{meta.label}</span>
         </span>
@@ -85,39 +105,43 @@ export function ToolCallCard({ call }: { call: ToolCallView }): JSX.Element {
 
       {open && hasDetail && (
         <div className="space-y-1.5 border-t border-border px-2 py-1.5">
+          <div className="font-mono text-[10px] text-fg-muted" dir="ltr">{call.name}</div>
           {Object.keys(call.args ?? {}).length > 0 && (
             <div>
-              <div className="mb-0.5 text-[9px] uppercase tracking-wide text-fg-muted">
-                Arguments
+              <div className="mb-0.5 text-[9px] tracking-wide text-fg-muted">
+                المعطيات
               </div>
-              <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-bg-2 p-1.5 font-mono text-[10px] text-fg-2">
+              <pre dir="ltr" className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-bg-2 p-1.5 text-start font-mono text-[10px] text-fg-2">
                 {JSON.stringify(call.args, null, 2)}
               </pre>
             </div>
           )}
           {call.result && (
             <div>
-              <div className="mb-0.5 text-[9px] uppercase tracking-wide text-fg-muted">
-                Result
+              <div className="mb-0.5 text-[9px] tracking-wide text-fg-muted">
+                النتيجة
               </div>
               <div
                 className={
                   call.result.ok || call.status === "corrected" ? "text-fg-2" : call.status === "retrying" ? "text-status-warning" : "text-status-error"
                 }
               >
+                {outcomeText(call.status, label)}
+              </div>
+              <div dir="ltr" className="mt-1 text-start text-[10px] text-fg-muted">
                 {call.result.summary}
                 {call.result.error && !call.result.ok
                   ? ` — ${call.result.error.message}`
                   : ""}
               </div>
-              {call.result.data !== undefined && <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-bg-2 p-1.5 text-[10px]">{JSON.stringify(call.result.data, null, 2)}</pre>}
+              {call.result.data !== undefined && <pre dir="ltr" className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-bg-2 p-1.5 text-start text-[10px]">{JSON.stringify(call.result.data, null, 2)}</pre>}
             </div>
           )}
         </div>
       )}
 
       {!open && Object.keys(call.args ?? {}).length > 0 && (
-        <div className="truncate px-2 pb-1.5 font-mono text-[10px] text-fg-muted">
+        <div dir="ltr" className="truncate px-2 pb-1.5 text-start font-mono text-[10px] text-fg-muted">
           {previewArgs(call.args)}
         </div>
       )}

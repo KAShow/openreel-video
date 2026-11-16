@@ -57,7 +57,7 @@ describe("ChatMessage", () => {
   it("copies fenced code blocks", async () => {
     render(<ChatMessage message={assistantMessage("```json\n{\"ok\":true}\n```")} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy code" }));
+    fireEvent.click(screen.getByRole("button", { name: "نسخ الكود" }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('{"ok":true}'));
   });
