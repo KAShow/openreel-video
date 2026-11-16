@@ -14,14 +14,9 @@ import { ChatErrorCard } from "./ChatErrorCard";
 import { ChatHistoryPanel } from "./ChatHistoryPanel";
 import { EditSharingPanel } from "./EditSharingPanel";
 import { useAIConnectionStore } from "../../../stores/ai-connection-store";
-import { msg, type MessageKey } from "../../../hawsh/i18n/messages";
-
-const SUGGESTIONS: ReadonlyArray<MessageKey> = [
-  "chat.suggestion.title",
-  "chat.suggestion.trim",
-  "chat.suggestion.fade",
-  "chat.suggestion.list",
-];
+import { msg } from "../../../hawsh/i18n/messages";
+import { SIMPLE_EDITOR } from "../../../hawsh/simple";
+import { chatStart } from "./suggestions";
 
 function EmptyState({
   hasOpenProject,
@@ -31,7 +26,9 @@ function EmptyState({
   const send = useChatStore((s) => s.send);
   const connection = useAIConnectionStore();
   const openSettings = useSettingsStore((s) => s.openSettings);
+  const project = useProjectStore((s) => s.project);
   const ready = !!connection.baseUrl.trim() && !!connection.model.trim() && (!!connection.apiKey || connection.provider === "compatible");
+  const start = hasOpenProject ? chatStart(project) : null;
 
   return (
     <div className="flex h-full flex-col items-center justify-center px-2 text-center">
@@ -40,16 +37,18 @@ function EmptyState({
       </div>
       <div className="text-[13px] font-medium text-fg">Edit by chatting</div>
       <Text type="supporting" color="secondary" className="mt-1 max-w-[14rem] text-[11px] leading-relaxed text-fg-muted">
-        {hasOpenProject
-          ? "Describe an edit in plain language and the AI will perform it on your timeline."
-          : "Open or create a project, then describe edits in plain language."}
+        {!hasOpenProject
+          ? "Open or create a project, then describe edits in plain language."
+          : start?.kind === "needsMedia"
+            ? msg("chat.empty.needsMedia")
+            : "Describe an edit in plain language and the AI will perform it on your timeline."}
       </Text>
       {hasOpenProject && !ready && (
         <Button label="Connect a model" variant="secondary" size="sm" onClick={() => openSettings("ai-editor")} className="mt-4" />
       )}
-      {hasOpenProject && ready && (
+      {ready && start?.kind === "suggest" && (
         <div className="mt-4 w-full space-y-1.5">
-          {SUGGESTIONS.map((s) => (
+          {start.keys.map((s) => (
             <Button
               key={s}
               label={msg(s)}
@@ -172,9 +171,12 @@ export function ChatPanel({
           )}
         </div>
       </header>
-      <div className="max-h-[40%] shrink-0 overflow-y-auto">
-        <EditSharingPanel disabled={busy} />
-      </div>
+      {/* Hawsh simple editor: edit JSON and presets are a developer tool that took up to 40% of the panel. */}
+      {!SIMPLE_EDITOR && (
+        <div className="max-h-[40%] shrink-0 overflow-y-auto">
+          <EditSharingPanel disabled={busy} />
+        </div>
+      )}
 
       {historyOpen && (
         <ChatHistoryPanel

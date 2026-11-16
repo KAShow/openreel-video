@@ -56,7 +56,10 @@ export const MESSAGES = {
   "chat.suggestion.title": "أضف عنواناً نصه «مرحباً» في أول 3 ثوانٍ",
   "chat.suggestion.trim": "اقتطع ثانيتين من نهاية أول مقطع",
   "chat.suggestion.fade": "أضف تلاشياً تدريجياً في بداية أول مقطع",
-  "chat.suggestion.list": "اعرض كل ما على الخط الزمني",
+  "chat.suggestion.addFirst": "ضع أول فيديو من المكتبة على الخط الزمني",
+  "chat.suggestion.addAll": "ضع كل ملفات المكتبة على الخط الزمني بالترتيب",
+  "chat.suggestion.silence": "احذف فترات الصمت من الفيديو",
+  "chat.empty.needsMedia": "أضف فيديو أو صورة من «الوسائط» أولاً، ثم اطلب التعديل بالكلام.",
   "chat.composer.hint": "اضغط Enter للإرسال · Shift+Enter لسطر جديد",
 
   // ── AI assistant: tool cards and confirmation ─────────────────────────────
