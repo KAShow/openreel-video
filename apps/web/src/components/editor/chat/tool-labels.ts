@@ -57,6 +57,8 @@ const LABELS: Readonly<Record<string, string>> = {
   inspect_preview: "فحص المعاينة",
   detect_silence: "كشف فترات الصمت",
   cut_silence: "قص فترات الصمت",
+  list_library: "عرض مكتبتك في عيون المخرج",
+  add_from_library: "إضافة من مكتبتك في عيون المخرج",
   transcribe_clip: "تفريغ الكلام وإضافة ترجمة (بالنقاط)",
   get_capabilities: "قراءة إمكانات المحرر",
   open_export: "فتح نافذة التصدير",

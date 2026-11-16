@@ -8,7 +8,7 @@ import { useRouter } from "../../hooks/use-router";
 import { useEditorPreload } from "../../hooks/useEditorPreload";
 import { useAnalytics, AnalyticsEvents } from "../../hooks/useAnalytics";
 import { signOutHawsh, useHawshStore } from "../../hawsh/session";
-import { HAWSH_EDITOR_NAME, HAWSH_EDITOR_PAGE } from "../../hawsh/config";
+import { HAWSH_EDITOR_NAME, HAWSH_SIGN_IN_URL } from "../../hawsh/config";
 
 const TemplateGallery = lazy(() =>
   import("./TemplateGallery").then((module) => ({ default: module.TemplateGallery })),
@@ -205,8 +205,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
 };
 
 /**
- * The account corner: signed out, a button that signs in through Director's Eyes (the site issues the
- * one-time code and opens the editor signed in); signed in, the account name with sign-out.
+ * The account corner: signed out, a button that signs in through Director's Eyes (the site signs the user
+ * in, issues the one-time code and brings them back to this same tab); signed in, the name with sign-out.
  */
 function AccountButton() {
   const status = useHawshStore((state) => state.status);
@@ -232,7 +232,7 @@ function AccountButton() {
   }
   return (
     <a
-      href={HAWSH_EDITOR_PAGE}
+      href={HAWSH_SIGN_IN_URL}
       className={`flex h-10 items-center gap-2 rounded-xl border border-border bg-background-secondary px-3 text-sm font-medium text-text-primary transition-colors hover:border-primary/40 hover:bg-background-tertiary ${focusRing}`}
     >
       <LogIn size={16} className="text-primary" aria-hidden />

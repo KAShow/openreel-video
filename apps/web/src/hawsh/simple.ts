@@ -10,7 +10,8 @@ export const HIDDEN_ASSET_TABS: ReadonlySet<string> = new Set(["recipes", "templ
 /** AI Generate tiles: duplicates of the site (voice, music) or not needed in short-form edits. */
 export const HIDDEN_AI_FEATURES: ReadonlySet<string> = new Set(["tts", "templates", "music", "multicam"]);
 
-/** Inspector sections (InspectorSection sectionId): pro tools rarely used in reels and ads. */
+/** Inspector sections (InspectorSection sectionId): pro tools rarely used in reels and ads.
+ *  Back on 2026-11-16 (owner's roadmap, docs/hawsh-roadmap.md): "text-behind-subject" and "color-grading". */
 export const HIDDEN_INSPECTOR_SECTIONS: ReadonlySet<string> = new Set([
   "keyframes",
   "multicam",
@@ -18,9 +19,7 @@ export const HIDDEN_INSPECTOR_SECTIONS: ReadonlySet<string> = new Set([
   "masking",
   "transform-3d",
   "particle-effects",
-  "text-behind-subject",
   "motion-path",
-  "color-grading",
   "background-removal",
 ]);
 

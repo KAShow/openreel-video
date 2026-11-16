@@ -57,3 +57,45 @@ describe("atomic editing sessions on the real engine", () => {
     expect(effect.enabled).toBe(false); expect(effect.id).not.toBe("shared-effect");
   });
 });
+
+describe("importing a library item during an AI turn (Hawsh Khalifa build)", () => {
+  beforeEach(() => useProjectStore.getState().createNewProject("Library"));
+  const fakeImport = () => {
+    const original = useProjectStore.getState().importMedia;
+    useProjectStore.setState({
+      importMedia: async (file: File) => {
+        const { project } = useProjectStore.getState();
+        const item = { id: `m-${file.name}`, name: file.name, type: "video", blob: file, fileHandle: null, thumbnailUrl: null, waveformData: null, metadata: { duration: 5, width: 640, height: 360, frameRate: 24, codec: "avc", sampleRate: 48000, channels: 1, fileSize: 1 } };
+        useProjectStore.setState({ project: { ...project, mediaLibrary: { items: [...project.mediaLibrary.items, item] }, modifiedAt: Date.now() } } as never);
+        return { success: true };
+      },
+    } as never);
+    return () => useProjectStore.setState({ importMedia: original } as never);
+  };
+
+  it("adds the media to the draft and still commits the turn", async () => {
+    const restore = fakeImport();
+    try {
+      const session = new EditingSession(); const txn = session.beginTransaction();
+      const track = await executeEditingTool("add_track", { trackType: "video" }, session);
+      const [mediaId] = await session.importIntoProject(new File(["x"], "gen.mp4", { type: "video/mp4" }));
+      expect(mediaId).toBe("m-gen.mp4");
+      const clip = await executeEditingTool("add_clip", { trackId: (track.data as { trackId: string }).trackId, mediaId, startTime: 0 }, session);
+      expect(clip.ok, clip.error?.message).toBe(true);
+      await session.commitTransaction(txn, "AI edit");
+      const project = useProjectStore.getState().project;
+      expect(project.mediaLibrary.items.map((m) => m.id)).toEqual(["m-gen.mp4"]);
+      expect(project.timeline.tracks.flatMap((t) => t.clips).map((c) => c.mediaId)).toEqual(["m-gen.mp4"]);
+    } finally { restore(); }
+  });
+
+  it("refuses when the user changed the project during the turn", async () => {
+    const restore = fakeImport();
+    try {
+      const session = new EditingSession(); session.beginTransaction();
+      await useProjectStore.getState().renameProject("User's edit");
+      await expect(session.importIntoProject(new File(["x"], "gen.mp4"))).rejects.toThrow(/project changed/);
+      expect(useProjectStore.getState().project.mediaLibrary.items).toHaveLength(0);
+    } finally { restore(); }
+  });
+});

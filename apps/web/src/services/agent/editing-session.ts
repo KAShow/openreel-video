@@ -8,6 +8,7 @@ import type { EditingHost, TxnHandle, TextOverlayOptions, UpdateTextOverlayOptio
 import { useProjectStore } from "../../stores/project-store";
 import { useUIStore } from "../../stores/ui-store";
 import { getMediaBridge, initializeMediaBridge } from "../../bridges/media-bridge";
+import { saveNextExportToLibrary } from "../../hawsh/lastExport";
 
 export function cloneEditSnapshot(snapshot: EditSnapshot): EditSnapshot {
   return { ...JSON.parse(JSON.stringify({ ...snapshot, mediaLibrary: undefined })), mediaLibrary: { items: snapshot.mediaLibrary.items.map((m) => ({ ...m })) } } as EditSnapshot;
@@ -27,6 +28,7 @@ export class EditingSession implements EditingHost {
   private executor = new ActionExecutor();
   private hasChanges = false;
   private exportRequested = false;
+  private saveExport = false;
   private portable = false;
   committed = false;
   constructor(private signal?: AbortSignal) {}
@@ -62,11 +64,35 @@ export class EditingSession implements EditingHost {
         this.committed = true;
       } finally { store.endHistoryGroup(); }
     }
-    if (this.exportRequested) useUIStore.getState().openModal("export");
+    if (this.exportRequested) {
+      if (this.saveExport) saveNextExportToLibrary();
+      useUIStore.getState().openModal("export");
+    }
   }
-  async rollbackTransaction(): Promise<void> { this.hasChanges = false; this.exportRequested = false; }
+  async rollbackTransaction(): Promise<void> { this.hasChanges = false; this.exportRequested = false; this.saveExport = false; }
   async runJob() { return { ok: false, error: "This job is unavailable in the local AI workspace" }; }
-  requestExport(): void { this.exportRequested = true; }
+  /** Opens the export window after commit; with saveToLibrary the finished export goes to "My references" (Hawsh Khalifa build). */
+  requestExport(opts: { saveToLibrary?: boolean } = {}): void { this.exportRequested = true; if (opts.saveToLibrary) this.saveExport = true; }
+  /**
+   * Hawsh Khalifa build: imports a file into the live project's media library during a turn (the assistant
+   * taking an item from the Director's Eyes library) and adds it to the draft too. The import is the only
+   * change allowed under the turn, so the stale-project check keeps working; the media stays in the
+   * library even if the turn is later discarded.
+   */
+  async importIntoProject(file: File): Promise<string[]> {
+    if (this.signal?.aborted) throw new Error("Edit cancelled");
+    const store = useProjectStore.getState();
+    if (projectRevision(store.getFullProject()) !== this.revision) throw new Error("The project changed while the AI was working. No AI changes were applied; try again.");
+    const before = new Set(store.getFullProject().mediaLibrary.items.map((m) => m.id));
+    const result = await store.importMedia(file);
+    if (!result.success) throw new Error(result.error?.message ?? "Could not import the file");
+    const live = useProjectStore.getState().getFullProject();
+    const added = live.mediaLibrary.items.filter((m) => !before.has(m.id));
+    this.draft = { ...this.draft, mediaLibrary: { items: [...this.draft.mediaLibrary.items, ...added.map((m) => ({ ...m }))] } };
+    this.revision = projectRevision(live);
+    if (this.portable) { try { createPortableEdit(this.draft); } catch { this.portable = false; } }
+    return added.map((m) => m.id);
+  }
   /** Hawsh Khalifa build: caption text carries clip metadata the portable edit format cannot hold (src/hawsh/transcribe-tool.ts). Every action is still validated by the executor. */
   allowNonPortableDraft(): void { this.portable = false; }
   replaceDraft(project: Project): void { this.draft = project; this.hasChanges = true; }

@@ -7,6 +7,8 @@
  */
 export const HAWSH_SUPABASE_URL = "https://dlqwvovmllggneslyuuz.supabase.co";
 export const HAWSH_EDITOR_PAGE = "https://hawsh-khalifa.com/tools/director/editor";
+/** The site page that signs the user in and brings them back to this tab (?return=1, Front DirectorEditorPage). */
+export const HAWSH_SIGN_IN_URL = `${HAWSH_EDITOR_PAGE}?return=1`;
 /** The editor's name everywhere it is shown. */
 export const HAWSH_EDITOR_NAME = "مونتاج عيون المخرج";
 /** Private bucket of the user's references (uploads). Insert policy: `{uid}/<file>.{jpg,png,webp,mp4,mov}`. */
