@@ -6,7 +6,7 @@ import { EditingSession } from "../services/agent/editing-session";
 import { EDITING_SYSTEM, editingToolDefs, editingToolNeedsConfirm, editingToolReadOnly, executeEditingTool } from "../services/agent/editing-tools";
 import { toolLabel } from "../components/editor/chat/tool-labels";
 import { clearTranscribeCache, transcribeChargeNotice, transcribeConfirmNote, transcribePointsCharged } from "./transcribe-tool";
-import { transcribeClip, loadTranscribePrice } from "./transcribe";
+import { transcribeClip, loadTranscribePrice, NoSpeechError } from "./transcribe";
 
 vi.mock("./transcribe", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./transcribe")>()),
@@ -208,6 +208,28 @@ describe("transcribe_clip tool", () => {
     expect(data).toMatchObject({ points: 0, reused: true, lines: 2 });
     expect(again.session.getProject().textClips?.map((t) => t.text)).toEqual(["السلام عليكم.", "أهلاً وسهلاً."]);
     expect(await transcribeConfirmNote({ id: "c", name: "transcribe_clip", args: { clipId: again.clipId } }, again.session)).toContain("دون خصم");
+  });
+
+  it("reports a clip with no speech as charged, without failing the turn or charging again", async () => {
+    transcribeMock.mockRejectedValueOnce(new NoSpeechError(2, 1));
+    const before = transcribePointsCharged();
+    const first = await setup();
+    const result = await executeEditingTool("transcribe_clip", { clipId: first.clipId }, first.session);
+    expect(result.ok).toBe(true);
+    expect(result.summary).toContain("No speech was detected");
+    expect(result.data).toMatchObject({ lines: 0, points: 2, noSpeech: true });
+    expect(transcribePointsCharged() - before).toBe(2);
+    expect(first.session.getProject().textClips ?? []).toHaveLength(0);
+
+    // Asking again for the same clip uses the remembered empty result: no second charge.
+    const again = await executeEditingTool("transcribe_clip", { clipId: first.clipId }, first.session);
+    expect(again.ok).toBe(true);
+    expect(transcribeMock).toHaveBeenCalledOnce();
+  });
+
+  it("says how many points a clip with no speech cost", () => {
+    expect(new NoSpeechError(2, 1).message).toContain("خُصم 2 نقطة");
+    expect(new NoSpeechError(0, 0).message).toBe("لم يُكتشف كلام في هذا المقطع.");
   });
 
   it("leaves a clip that already has captions alone, without charging", async () => {

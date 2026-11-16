@@ -14,7 +14,7 @@ import { SUBTITLE_STYLE_PRESETS, projectUsesUniversalTracks, type Clip, type Pro
 import { TitleEngine } from "@openreel/core/text/title-engine";
 import type { EditingHost, ToolCall, ToolResult } from "@openreel/agent";
 import { msg } from "./i18n/messages";
-import { loadTranscribePrice, transcribeClip, transcribePoints, wordsToCaptions, type Word } from "./transcribe";
+import { loadTranscribePrice, NoSpeechError, transcribeClip, transcribePoints, wordsToCaptions, type Word } from "./transcribe";
 
 export const TRANSCRIBE_TOOL = "transcribe_clip";
 export const TRANSCRIBE_LANGUAGES = ["ar", "en", "auto", "fr", "es", "tr", "ur", "hi"];
@@ -127,6 +127,17 @@ export async function transcribeClipTool(args: Record<string, unknown>, host: Dr
       if (res.words?.length) paidWords.set(key, res.words);
       ({ segments, points, minutes } = res);
     } catch (error) {
+      if (error instanceof NoSpeechError) {
+        // Already charged: not a failure (that would discard the turn and invite a paid retry). Remember
+        // the empty result so asking again for this clip costs nothing, and have the model tell the user.
+        pointsCharged += error.points;
+        paidWords.set(key, []);
+        return {
+          ok: true,
+          summary: `No speech was detected in this clip; ${error.points} Director's Eyes points were charged for ${error.minutes} min. Tell the user; do not call transcribe_clip again for this clip.`,
+          data: { clipId, lines: 0, points: error.points, minutes: error.minutes, noSpeech: true },
+        };
+      }
       return fail(error instanceof Error ? error.message : "تعذّر التفريغ.");
     }
   }
