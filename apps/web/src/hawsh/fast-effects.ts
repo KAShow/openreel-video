@@ -187,8 +187,16 @@ function setup(): Gl | null {
   if (broken) return null;
   if (state) return state.gl.isContextLost() ? ((broken = true), null) : state;
   try {
-    const canvas = makeCanvas(2, 2);
-    const gl = canvas.getContext("webgl2", { premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false }) as WebGL2RenderingContext | null;
+    const options = { premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false };
+    let canvas = makeCanvas(2, 2);
+    let gl = canvas.getContext("webgl2", options) as WebGL2RenderingContext | null;
+    // Older iPhone Safari has OffscreenCanvas for 2D only: try a regular canvas before giving up.
+    if (!gl && typeof document !== "undefined" && !(canvas instanceof HTMLCanvasElement)) {
+      const element = document.createElement("canvas");
+      element.width = 2; element.height = 2;
+      canvas = element;
+      gl = element.getContext("webgl2", options) as WebGL2RenderingContext | null;
+    }
     if (!gl) { broken = true; return null; }
     canvas.addEventListener("webglcontextlost", () => { broken = true; state = null; });
     const vs = compile(gl, gl.VERTEX_SHADER, VERTEX);
