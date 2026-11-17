@@ -29,8 +29,9 @@ const calculateIsDark = (mode: ThemeMode): boolean => {
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
-      mode: DARK_ONLY ? "dark" : "light",
-      isDark: DARK_ONLY,
+      // Hawsh Khalifa build: dark by default, light on request (src/hawsh/appearance.ts).
+      mode: "dark",
+      isDark: true,
 
       setMode: (requested: ThemeMode) => {
         const mode = DARK_ONLY ? "dark" : requested;
@@ -58,7 +59,9 @@ export const useThemeStore = create<ThemeState>()(
       },
     }),
     {
-      name: "openreel-theme",
+      // New key (2026-11-17): a "light" left in "openreel-theme" from before the dark-only months must
+      // not switch anyone to light now that the switch is back.
+      name: "hawsh-theme",
       onRehydrateStorage: () => (state) => {
         if (state) {
           if (DARK_ONLY) state.mode = "dark";

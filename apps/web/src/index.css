@@ -98,7 +98,7 @@
     --waveform: oklch(0.78 0.16 162 / 0.85);
     --stage-bg: oklch(0.08 0.004 240);
     /* the preview "screen" itself (canvas + letterbox): black in dark */
-    --screen-bg: oklch(0 0 0);
+    --screen-bg: #000000; /* hex, not oklch: the preview canvas paints it as a fillStyle */
 
     /* accent (brand emerald — matches the OpenReel logo) */
     --accent: oklch(0.7 0.15 162);
@@ -124,6 +124,39 @@
     --fg-3: oklch(0.82 0.008 240);
     --fg-muted: oklch(0.76 0.01 240);
     --hover: oklch(0.28 0.008 240);
+  }
+  /* Editor chrome: the bars, the preview stage, and touch feedback. */
+  .hawsh-mobile {
+    --chrome: #000;
+    --on-chrome: #fff;
+    --stage: #000;
+    --wash: rgb(255 255 255 / 0.1);
+    --wash-soft: rgb(255 255 255 / 0.06);
+    --line: rgb(255 255 255 / 0.1);
+    --line-strong: rgb(255 255 255 / 0.35);
+  }
+  /* Light theme of the editor (owner, 2026-11-17: a theme switch). Text ≥ 7:1 on white. */
+  .hawsh-mobile.hawsh-light {
+    --bg: #f3f3f5;
+    --bg-1: #ffffff;
+    --bg-2: #e9e9ee;
+    --border: #d2d2d9;
+    --border-strong: #b4b4bd;
+    --fg: #101012;
+    --fg-2: #2b2b30;
+    --fg-3: #43434a;
+    --fg-muted: #55555d;
+    --hover: #e4e4ea;
+    --chrome: #ffffff;
+    --on-chrome: #101012;
+    --stage: #e6e6eb;
+    --wash: rgb(0 0 0 / 0.07);
+    --wash-soft: rgb(0 0 0 / 0.04);
+    --line: rgb(0 0 0 / 0.1);
+    --line-strong: rgb(0 0 0 / 0.3);
+    --tl-bg: #f3f3f5;
+    --track-bg: #ffffff;
+    color-scheme: light;
   }
 
   [data-density="compact"] {
@@ -279,10 +312,12 @@
   unicode-bidi: plaintext;
 }
 
-/* Director's Eyes gold instead of the OpenReel emerald, phone and computer alike (owner, 2026-10-31;
-   always dark, see DARK_ONLY in src/hawsh/simple.ts). Outside @layer, so it wins over the theme blocks. */
+/* Director's Eyes gold instead of the OpenReel emerald, phone and computer alike, in both themes
+   (owner, 2026-10-31). Outside @layer, so it wins over the theme blocks; a colour the user picks
+   (src/hawsh/appearance.ts) outranks it. */
+:root,
 .dark,
-[data-theme="dark"] {
+[data-theme] {
   --primary: 46 94% 54%;
   --primary-foreground: 0 0% 8%;
   --ring: 46 94% 54%;
@@ -294,8 +329,8 @@
   --selected: rgb(248 198 28 / 0.25);
 }
 
-/* White text was written for emerald; on gold it needs to be dark. */
-.dark .bg-primary.text-white,
-.dark .bg-accent.text-white {
+/* White text was written for emerald; on gold it needs to be dark (and stays white on dark colours). */
+.bg-primary.text-white,
+.bg-accent.text-white {
   color: hsl(var(--primary-foreground));
 }

@@ -26,6 +26,8 @@ import { selectedTarget } from "./clip-tools";
 import { TextComposer } from "./AddSheets";
 import { PhoneExport } from "./PhoneExport";
 import { useWideEditor } from "./phone";
+import { useThemeStore } from "../../stores/theme-store";
+import { ThemeToggle } from "../AppearanceControls";
 import { Sheet, SIDE_PANEL_WIDTH, useSidePanelOpen } from "./ui";
 import { AudioSheet, CaptionsSheet, EditSheet, EffectsSheet, MoreSheet, TransitionsSheet } from "./ToolSheets";
 
@@ -69,6 +71,7 @@ export const MobileEditor: React.FC = () => {
   const clearSelection = useUIStore((s) => s.clearSelection);
   const wide = useWideEditor();
   const sidePanel = useSidePanelOpen();
+  const isDark = useThemeStore((s) => s.isDark);
   // Selecting a clip shows its own tools; the main sheet closes so the two never stack.
   useEffect(() => { if (clipSelected) setSheet(null); }, [clipSelected]);
 
@@ -89,19 +92,20 @@ export const MobileEditor: React.FC = () => {
   }, []);
 
   return (
-    <div className="hawsh-mobile dark flex h-full w-full flex-col overflow-hidden bg-black text-fg" data-testid="hawsh-mobile-editor">
+    <div className={`hawsh-mobile ${isDark ? "dark" : "hawsh-light"} flex h-full w-full flex-col overflow-hidden bg-[var(--chrome)] text-fg`} data-testid="hawsh-mobile-editor">
 
       <header className="flex h-12 shrink-0 items-center gap-2 px-3" dir="rtl" data-no-translate="">
         {SKIP_WELCOME ? <span className="h-10 w-10" aria-hidden /> : (
           <button type="button" aria-label="رجوع" onClick={() => navigate("welcome")} className="grid h-10 w-10 place-items-center rounded-full text-lg">→</button>
         )}
         <div className="min-w-0 flex-1 truncate text-center text-sm font-semibold" dir="auto">{projectName}</div>
+        <ThemeToggle className="active:bg-[var(--wash)]" />
         <button type="button" onClick={() => setExporting(true)} className="h-9 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground">تصدير</button>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col transition-[padding] duration-200" style={{ paddingRight: wide && sidePanel ? SIDE_PANEL_WIDTH : 0 }}>
       <section ref={previewBox} aria-label="المعاينة" data-testid="phone-preview"
-        className={fullScreen ? "fixed inset-0 z-[95] bg-black" : `relative min-h-0 shrink-0 bg-black ${wide ? "basis-[52%]" : "basis-[44%]"}`}>
+        className={fullScreen ? "fixed inset-0 z-[95] bg-black" : `relative min-h-0 shrink-0 bg-[var(--stage)] ${wide ? "basis-[52%]" : "basis-[44%]"}`}>
         <div className={`h-full w-full ${fullScreen ? "pointer-events-none pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)]" : ""}`}>
           <Preview hideControls />
         </div>
@@ -123,31 +127,34 @@ export const MobileEditor: React.FC = () => {
           </>
         )}
       </section>
-      <div className="flex h-11 shrink-0 items-center justify-between bg-black px-4 text-white" dir="ltr">
+      <div className="flex h-11 shrink-0 items-center justify-between bg-[var(--chrome)] px-4 text-[var(--on-chrome)]" dir="ltr">
         <span className="w-32 font-mono text-xs tabular-nums"><span>{fmt(playhead)}</span><span className="text-fg-muted"> / {fmt(duration)}</span></span>
-        <button type="button" aria-label={playing ? "إيقاف" : "تشغيل"} onClick={togglePlayback} className="grid h-10 w-10 place-items-center rounded-full active:bg-white/10">
+        <button type="button" aria-label={playing ? "إيقاف" : "تشغيل"} onClick={togglePlayback} className="grid h-10 w-10 place-items-center rounded-full active:bg-[var(--wash)]">
           {playing ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
         </button>
         <div className="flex w-32 items-center justify-end gap-1">
           <UndoRedo />
-          <button type="button" aria-label="شاشة كاملة" onClick={enterFullScreen} className="grid h-9 w-9 place-items-center rounded-full active:bg-white/10">
+          <button type="button" aria-label="شاشة كاملة" onClick={enterFullScreen} className="grid h-9 w-9 place-items-center rounded-full active:bg-[var(--wash)]">
             <Maximize size={20} />
           </button>
         </div>
       </div>
 
-      <section className="relative min-h-0 flex-1 overflow-hidden border-t border-white/10 bg-bg" aria-label="الخط الزمني">
+      <section className="relative min-h-0 flex-1 overflow-hidden border-t border-[var(--line)] bg-bg" aria-label="الخط الزمني">
         <TouchTimeline onAddText={() => setSheet("text")} />
       </section>
       </div>
 
       {clipSelected ? <ClipTools /> : (
-      <nav className="flex h-16 shrink-0 justify-center bg-black pb-[env(safe-area-inset-bottom)]" dir="rtl" data-no-translate="" aria-label="أدوات المونتاج">
+      <nav className="flex h-16 shrink-0 justify-center bg-[var(--chrome)] pb-[env(safe-area-inset-bottom)]" dir="rtl" data-no-translate="" aria-label="أدوات المونتاج">
         <div className="flex w-full max-w-3xl items-stretch">
         {TOOLS.map((t) => (
           <button key={t.id} type="button" onClick={() => setSheet(sheet === t.id ? null : t.id)}
-            className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[11px] ${sheet === t.id ? "text-primary" : "text-fg"}`}>
-            <t.icon size={22} strokeWidth={1.6} aria-hidden />
+            aria-pressed={sheet === t.id}
+            className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] text-fg ${sheet === t.id ? "font-bold" : ""}`}>
+            <span className={`grid h-7 w-12 place-items-center rounded-full ${sheet === t.id ? "bg-primary text-primary-foreground" : ""}`}>
+              <t.icon size={21} strokeWidth={1.7} aria-hidden />
+            </span>
             {t.label}
           </button>
         ))}
@@ -183,7 +190,7 @@ const UndoRedo: React.FC = () => {
   // Re-render on every project change so the enabled state follows the history.
   useProjectStore((s) => s.project);
   const { undo, redo, canUndo, canRedo } = useProjectStore.getState();
-  const btn = "grid h-9 w-9 place-items-center rounded-full active:bg-white/10 disabled:opacity-30";
+  const btn = "grid h-9 w-9 place-items-center rounded-full active:bg-[var(--wash)] disabled:opacity-30";
   return (
     <div className="flex justify-end gap-1" data-testid="undo-redo">
       <button type="button" aria-label="تراجع" className={btn} disabled={!canUndo()} onClick={() => void undo()}><Undo2 size={22} strokeWidth={1.6} /></button>

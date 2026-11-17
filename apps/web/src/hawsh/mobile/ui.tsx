@@ -42,7 +42,7 @@ export const Sheet: React.FC<{
   const header = bare ? null : (
     <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
       <span className="text-sm font-bold text-fg">{title}</span>
-      <button type="button" aria-label="إغلاق" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-fg active:bg-white/10"><X size={20} /></button>
+      <button type="button" aria-label="إغلاق" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-fg active:bg-[var(--wash)]"><X size={20} /></button>
     </div>
   );
   const body = bare
@@ -68,7 +68,8 @@ export const Sheet: React.FC<{
 };
 
 export const chip = "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold active:scale-95 disabled:opacity-40";
-export const chipOn = "border-primary bg-primary/15 text-primary";
+/** The chosen option: filled with the accent so it reads in both themes and with every accent colour. */
+export const chipOn = "border-primary bg-primary text-primary-foreground";
 export const chipOff = "border-border bg-bg-1 text-fg";
 export const bigButton = "flex w-full items-center gap-3 rounded-xl border border-border bg-bg-1 p-3 text-start text-sm active:bg-bg-2 disabled:opacity-40";
 export const primaryButton = "w-full rounded-xl border border-primary bg-primary px-3 py-3 text-sm font-bold text-primary-foreground active:opacity-90 disabled:opacity-40";
@@ -111,4 +112,4 @@ export function useNote(): [string | null, (text: string | null) => void] {
 }
 
 export const Note: React.FC<{ text: string | null }> = ({ text }) =>
-  text ? <p className="rounded-lg bg-white/10 px-3 py-2 text-center text-xs" role="status">{text}</p> : null;
+  text ? <p className="rounded-lg bg-[var(--wash)] px-3 py-2 text-center text-xs" role="status">{text}</p> : null;

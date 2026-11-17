@@ -7,12 +7,11 @@ import { EditorActionRail } from "./EditorActionRail";
 describe("EditorActionRail", () => {
   afterEach(() => cleanup());
 
-  it("has no theme switch: the editor is always dark (DARK_ONLY)", () => {
-    render(<EditorActionRail />);
-    expect(screen.queryByRole("button", { name: /^Theme:/ })).toBeNull();
-
+  it("switches between dark and light (the theme switch is back since 2026-11-17)", () => {
     useThemeStore.getState().setMode("light");
-    expect(useThemeStore.getState().mode).toBe("dark");
+    expect(useThemeStore.getState().isDark).toBe(false);
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    useThemeStore.getState().setMode("dark");
     expect(useThemeStore.getState().isDark).toBe(true);
     expect(document.documentElement.classList.contains("dark")).toBe(true);
   });

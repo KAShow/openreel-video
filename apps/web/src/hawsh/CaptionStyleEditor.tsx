@@ -83,9 +83,9 @@ export const CaptionStyleEditor: React.FC<{ clipId?: string }> = ({ clipId }) =>
         <div className="flex flex-wrap gap-2">
           {CAPTION_COLORS.map((c) => (
             <button key={c} type="button" disabled={busy} aria-label={`اللون ${c}`} onClick={() => void apply({ color: c })}
-              className={`h-9 w-9 rounded-full border-2 active:scale-95 ${look.color.toLowerCase() === c ? "border-primary ring-2 ring-primary/40" : "border-white/30"}`} style={{ background: c }} />
+              className={`h-9 w-9 rounded-full border-2 active:scale-95 ${look.color.toLowerCase() === c ? "border-primary ring-2 ring-primary/40" : "border-[var(--line-strong)]"}`} style={{ background: c }} />
           ))}
-          <label className="grid h-9 w-9 cursor-pointer place-items-center rounded-full border-2 border-dashed border-white/40 text-lg" aria-label="لون آخر">
+          <label className="grid h-9 w-9 cursor-pointer place-items-center rounded-full border-2 border-dashed border-[var(--line-strong)] text-lg" aria-label="لون آخر">
             +
             <input type="color" className="sr-only" value={/^#[0-9a-f]{6}$/i.test(look.color) ? look.color : "#ffffff"} onChange={(e) => void apply({ color: e.target.value })} />
           </label>

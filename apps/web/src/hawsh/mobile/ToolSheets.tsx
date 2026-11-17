@@ -18,6 +18,7 @@ import { logEvent } from "../logger";
 import { ServerCaptionPanel } from "../ServerCaptionPanel";
 import { CaptionStyleEditor } from "../CaptionStyleEditor";
 import { captionClips } from "../caption-look";
+import { AppearancePicker } from "../AppearanceControls";
 import { captionClipId } from "./add-tools";
 import { sheetTarget } from "./live";
 import {
@@ -384,13 +385,16 @@ export const MoreSheet: React.FC<{ onOpenAssistant: () => void }> = ({ onOpenAss
 
   return (
     <div className="space-y-4">
+      <Row label="المظهر">
+        <AppearancePicker />
+      </Row>
       <Row label="مقاس الفيديو">
         <div className="grid grid-cols-2 gap-2">
           {FORMATS.map((f) => (
             <button key={f.id} type="button" disabled={busy} onClick={() => { setBusy(true); void setFormat(f.id).then((err) => setNote(err ?? `صار المقاس ${f.label} ${f.id}.`)).finally(() => setBusy(false)); }}
               className={`rounded-xl border p-3 text-start ${format?.id === f.id ? chipOn : chipOff}`}>
               <b className="block text-sm">{f.label} <span className="font-mono text-xs" dir="ltr">{f.id}</span></b>
-              <span className="text-[11px] text-fg-muted">{f.hint}</span>
+              <span className="text-[11px] opacity-80">{f.hint}</span>
             </button>
           ))}
         </div>
