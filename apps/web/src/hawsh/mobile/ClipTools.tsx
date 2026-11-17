@@ -55,8 +55,10 @@ export const ClipTools: React.FC = () => {
   const project = useProjectStore((s) => s.project);
   const selected = useUIStore((s) => s.selectedItems);
   const clearSelection = useUIStore((s) => s.clearSelection);
-  const playhead = useTimelineStore((s) => s.playheadPosition);
   const target = selectedTarget(project, selected);
+  // Only whether the playhead is over this clip, not the time itself: no re-render on every frame.
+  const canCut = useTimelineStore((s) => (target ? canCutAt(target, s.playheadPosition) : false));
+  const playheadNow = () => useTimelineStore.getState().playheadPosition;
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -83,7 +85,7 @@ export const ClipTools: React.FC = () => {
 
   const onTool = (tool: Tool) => {
     if (tool.sheet) { setSheet(tool.sheet); return; }
-    if (tool.run) void run(() => tool.run!(target, playhead), tool.id === "delete" ? () => clearSelection() : undefined);
+    if (tool.run) void run(() => tool.run!(target, playheadNow()), tool.id === "delete" ? () => clearSelection() : undefined);
   };
 
   return (
@@ -116,12 +118,12 @@ export const ClipTools: React.FC = () => {
             {sheet === "effects" && target.kind === "clip" && <EffectsSheet key={target.id} clipId={target.id} />}
             {sheet === "trim" && (
               <div className="space-y-2">
-                <p className="text-xs text-fg-muted">{canCutAt(target, playhead) ? "يقص عند المؤشر الأبيض." : NOT_UNDER_PLAYHEAD}</p>
+                <p className="text-xs text-fg-muted">{canCut ? "يقص عند المؤشر الأبيض." : NOT_UNDER_PLAYHEAD}</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <button type="button" className={btn} disabled={busy || !canCutAt(target, playhead)}
-                    onClick={() => void run(() => trimAt(target, playhead, "start"), () => setSheet(null))}>احذف ما قبل المؤشر</button>
-                  <button type="button" className={btn} disabled={busy || !canCutAt(target, playhead)}
-                    onClick={() => void run(() => trimAt(target, playhead, "end"), () => setSheet(null))}>احذف ما بعد المؤشر</button>
+                  <button type="button" className={btn} disabled={busy || !canCut}
+                    onClick={() => void run(() => trimAt(target, playheadNow(), "start"), () => setSheet(null))}>احذف ما قبل المؤشر</button>
+                  <button type="button" className={btn} disabled={busy || !canCut}
+                    onClick={() => void run(() => trimAt(target, playheadNow(), "end"), () => setSheet(null))}>احذف ما بعد المؤشر</button>
                 </div>
               </div>
             )}

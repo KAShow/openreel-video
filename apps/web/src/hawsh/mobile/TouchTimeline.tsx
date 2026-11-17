@@ -78,7 +78,6 @@ const AddLane: React.FC<{ label: string; half: number; width: number; height: nu
 export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }) => {
   const project = useProjectStore((s) => s.project);
   const duration = project.timeline?.duration ?? 0;
-  const playhead = useTimelineStore((s) => s.playheadPosition);
   const playing = useTimelineStore((s) => s.playbackState === "playing");
   const seekTo = useTimelineStore((s) => s.seekTo);
   const pause = useTimelineStore((s) => s.pause);
@@ -105,16 +104,22 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
     return () => ro.disconnect();
   }, []);
 
-  // Playhead (playing, seeks from elsewhere, zoom) → scroll position. Before paint, so a zoom never
-  // shows the wrong spot under the playhead.
-  useLayoutEffect(() => {
+  // Playhead (playing, seeks from elsewhere, zoom) → scroll position. Set on the element directly, not
+  // through React state: the playhead changes ~30 times a second while playing, and re-rendering the
+  // whole timeline (every clip and filmstrip) that often costs the preview frames.
+  const followPlayhead = (time: number) => {
     const el = scroller.current;
     if (!el) return;
-    const x = playhead * zoom;
+    const x = time * zoomRef.current;
     if (Math.abs(el.scrollLeft - x) < 1) return;
     programmatic.current = x;
     el.scrollLeft = x;
-  }, [playhead, half, zoom]);
+  };
+  const followRef = useRef(followPlayhead);
+  followRef.current = followPlayhead;
+  useEffect(() => useTimelineStore.subscribe((s) => s.playheadPosition, (t) => followRef.current(t)), []);
+  // Before paint, so a zoom never shows the wrong spot under the playhead.
+  useLayoutEffect(() => { followPlayhead(useTimelineStore.getState().playheadPosition); }, [half, zoom]);
 
   // Finger scroll → playhead.
   const onScroll = () => {

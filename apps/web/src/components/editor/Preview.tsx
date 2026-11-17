@@ -91,6 +91,7 @@ import {
 import { snapCanvasPosition } from "./preview/canvas-snapping";
 import { captureNativeVideoFrame, seekVideoToFrame } from "./preview/video-frame";
 import { resolvePlaybackLoop, resolvePlaybackStart } from "../../utils/playback-loop";
+import { finishPreviewPlayback, markPreviewFrame, setPlaybackContext } from "../../hawsh/perf";
 import { ProcessingOverlay } from "./ProcessingOverlay";
 import { editingFrameDurationMs } from "./editing-frame-rate";
 import {
@@ -576,6 +577,18 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
       ),
     [settings.width, settings.height, playbackQuality],
   );
+  useEffect(() => {
+    // Hawsh playback meter: what the summary line knows about this preview.
+    setPlaybackContext(() => {
+      const clips = useProjectStore.getState().project.timeline.tracks.flatMap((t) => t.clips);
+      return {
+        preview: `${previewRes.width}x${previewRes.height}`,
+        clips: clips.length,
+        clips_with_effects: clips.filter((c) => c.effects?.some((e) => e.enabled)).length,
+        speed_changes: clips.filter((c) => typeof c.speed === "number" && Math.abs(c.speed - 1) > 0.001).length,
+      };
+    });
+  }, [previewRes.width, previewRes.height]);
 
   const previewFrameSize = useMemo(() => {
     if (videoAreaSize.width <= 0 || videoAreaSize.height <= 0) {
@@ -2567,7 +2580,14 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         }
 
         if (!masterClock.isPlaying) {
+          // A stopped clock (not paused) ran to the end by itself; it reports 0, so the check above
+          // misses it. Treat it as the end so the next play starts from the beginning.
+          const reachedEnd = masterClock.isStopped;
           cleanup();
+          if (reachedEnd) {
+            setPlayheadPosition(0);
+            startPositionRef.current = 0;
+          }
           if (!isScrubbingRef.current) {
             onEnd();
           }
@@ -3101,6 +3121,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
           // Keep the previous good frame when bitmap capture is unavailable.
         }
 
+        markPreviewFrame("native");
         rafId = requestAnimationFrame(() => {
           drawFrame();
         });
@@ -3494,6 +3515,11 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
             isProcessingFrame = false;
             cleanupPlaybackResources();
             cleanupAudioResources();
+            // Stopped (not paused) = the clock ran to the end by itself; see the native path.
+            if (masterClock.isStopped) {
+              setPlayheadPosition(0);
+              startPositionRef.current = 0;
+            }
             if (!isScrubbingRef.current) {
               pause();
             }
@@ -4247,6 +4273,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
 
           // Keep the master clock synchronized with the rendered frame.
           masterClock.reportVideoTime(currentPlayhead);
+          markPreviewFrame("multi");
           const now = performance.now();
           const elapsed = now - lastFrameTimestamp;
           const targetTime = frameDuration / rateRef.current;
@@ -4390,6 +4417,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
     return () => {
       isActive = false;
       nativePlaybackActiveRef.current = false;
+      finishPreviewPlayback();
       const masterClock = getMasterClock();
       if (masterClock.isPlaying || masterClock.isPaused) {
         startPositionRef.current = masterClock.currentTime;

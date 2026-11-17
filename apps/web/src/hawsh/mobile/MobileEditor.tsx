@@ -28,6 +28,7 @@ import { PhoneExport } from "./PhoneExport";
 import { useWideEditor } from "./phone";
 import { useThemeStore } from "../../stores/theme-store";
 import { ThemeToggle } from "../AppearanceControls";
+import { PerfReadout } from "../PerfReadout";
 import { Sheet, SIDE_PANEL_WIDTH, useSidePanelOpen } from "./ui";
 import { AudioSheet, CaptionsSheet, EditSheet, EffectsSheet, MoreSheet, TransitionsSheet } from "./ToolSheets";
 
@@ -56,7 +57,6 @@ export const MobileEditor: React.FC = () => {
   const projectName = useProjectStore((s) => s.project.name);
   const duration = useProjectStore((s) => s.project.timeline?.duration ?? 0);
   const playing = useTimelineStore((s) => s.playbackState === "playing");
-  const playhead = useTimelineStore((s) => s.playheadPosition);
   const togglePlayback = useTimelineStore((s) => s.togglePlayback);
   const project = useProjectStore((s) => s.project);
   const selectedItems = useUIStore((s) => s.selectedItems);
@@ -66,8 +66,6 @@ export const MobileEditor: React.FC = () => {
   const current = TOOLS.find((t) => t.id === sheet);
   const [fullScreen, setFullScreen] = useState(false);
   const previewBox = useRef<HTMLElement>(null);
-  const seekTo = useTimelineStore((s) => s.seekTo);
-  const pause = useTimelineStore((s) => s.pause);
   const clearSelection = useUIStore((s) => s.clearSelection);
   const wide = useWideEditor();
   const sidePanel = useSidePanelOpen();
@@ -119,16 +117,14 @@ export const MobileEditor: React.FC = () => {
               <button type="button" aria-label={playing ? "إيقاف" : "تشغيل"} onClick={togglePlayback} className="grid h-10 w-10 shrink-0 place-items-center rounded-full active:bg-white/10">
                 {playing ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
               </button>
-              <input type="range" min={0} max={Math.max(duration, 0.01)} step={0.01} value={Math.min(playhead, duration)} aria-label="موضع التشغيل"
-                onPointerDown={() => { if (playing) pause(); }} onChange={(e) => seekTo(Number(e.target.value))}
-                className="min-w-0 flex-1 accent-primary" />
-              <span className="shrink-0 font-mono text-xs tabular-nums">{fmt(playhead)}<span className="text-fg-muted"> / {fmt(duration)}</span></span>
+              <SeekBar duration={duration} />
+              <span className="shrink-0 font-mono text-xs tabular-nums"><PlayTime /><span className="text-fg-muted"> / {fmt(duration)}</span></span>
             </div>
           </>
         )}
       </section>
       <div className="flex h-11 shrink-0 items-center justify-between bg-[var(--chrome)] px-4 text-[var(--on-chrome)]" dir="ltr">
-        <span className="w-32 font-mono text-xs tabular-nums"><span>{fmt(playhead)}</span><span className="text-fg-muted"> / {fmt(duration)}</span></span>
+        <span className="w-32 font-mono text-xs tabular-nums"><PlayTime /><span className="text-fg-muted"> / {fmt(duration)}</span></span>
         <button type="button" aria-label={playing ? "إيقاف" : "تشغيل"} onClick={togglePlayback} className="grid h-10 w-10 place-items-center rounded-full active:bg-[var(--wash)]">
           {playing ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
         </button>
@@ -181,7 +177,30 @@ export const MobileEditor: React.FC = () => {
         </Sheet>
       )}
       {exporting && <PhoneExport onClose={() => setExporting(false)} />}
+      <PerfReadout />
     </div>
+  );
+};
+
+/**
+ * The playhead time. Its own component so playback re-renders this text only, not the whole editor
+ * (the store's playhead changes about 30 times a second while playing).
+ */
+const PlayTime: React.FC = () => {
+  const seconds = useTimelineStore((s) => Math.max(0, Math.floor(s.playheadPosition)));
+  return <span>{fmt(seconds)}</span>;
+};
+
+/** Seek bar of the full-screen preview (same reason as PlayTime). */
+const SeekBar: React.FC<{ duration: number }> = ({ duration }) => {
+  const playhead = useTimelineStore((s) => s.playheadPosition);
+  const playing = useTimelineStore((s) => s.playbackState === "playing");
+  const seekTo = useTimelineStore((s) => s.seekTo);
+  const pause = useTimelineStore((s) => s.pause);
+  return (
+    <input type="range" min={0} max={Math.max(duration, 0.01)} step={0.01} value={Math.min(playhead, duration)} aria-label="موضع التشغيل"
+      onPointerDown={() => { if (playing) pause(); }} onChange={(e) => seekTo(Number(e.target.value))}
+      className="min-w-0 flex-1 accent-primary" />
   );
 };
 
