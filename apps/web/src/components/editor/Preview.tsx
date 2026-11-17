@@ -76,6 +76,7 @@ import {
   applyPreviewAdjustmentLayers,
   clipNeedsFrameProcessing,
   clipCssFilterOnly,
+  clipFastEffects,
   preparePreviewFrame,
   renderAllLayersWithGPU,
   hasBehindSubjectText,
@@ -92,6 +93,8 @@ import { captureNativeVideoFrame, seekVideoToFrame } from "./preview/video-frame
 import { resolvePlaybackLoop, resolvePlaybackStart } from "../../utils/playback-loop";
 import { finishPreviewPlayback, markPreviewFrame, setPlaybackContext } from "../../hawsh/perf";
 import { closeSequentialFrames, sequentialFramesFor, type FrameSink } from "../../hawsh/sequential-frames";
+import { renderFastEffects } from "../../hawsh/fast-effects";
+import { nativePlaybackSpeedOk } from "../../hawsh/native-speed";
 import { ProcessingOverlay } from "./ProcessingOverlay";
 import { editingFrameDurationMs } from "./editing-frame-rate";
 import {
@@ -1779,10 +1782,15 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
                     frame.height,
                   );
 
-                  const nativeCssFilter = clipCssFilterOnly(clip.id);
+                  const fastFx = clipFastEffects(clip.id);
+                  const fastFrame = fastFx ? renderFastEffects(clip.id, frame, fastFx) : null;
+                  const nativeCssFilter = fastFrame ? null : clipCssFilterOnly(clip.id);
                   let processedFrame: ImageBitmap | null = null;
                   try {
-                    if (nativeCssFilter) {
+                    if (fastFrame) {
+                      await drawClipFrame(ctx, clip.id, fastFrame, stabilizedTransform, canvas.width, canvas.height, time);
+                      hasRenderedFrame = true;
+                    } else if (nativeCssFilter) {
                       await drawClipFrame(
                         ctx,
                         clip.id,
@@ -2211,10 +2219,11 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
               const clipSpeed = speedEngine.getClipSpeed(clip.id);
               const isReverse = speedEngine.isReverse(clip.id);
               if (
-                clipSpeed !== 1 ||
+                !nativePlaybackSpeedOk(clipSpeed, speedEngine.getSpeedKeyframes(clip.id).length, speedEngine.getFreezeFrames(clip.id).length) ||
                 isReverse ||
                 (clipNeedsFrameProcessing(clip.id) &&
-                  clipCssFilterOnly(clip.id) === null)
+                  clipCssFilterOnly(clip.id) === null &&
+                  clipFastEffects(clip.id) === null)
               ) {
                 return { canUse: false, clips: [] };
               }
@@ -2558,8 +2567,9 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         }
       };
 
-      const playVideoElement = async (video: HTMLVideoElement): Promise<void> => {
-        video.playbackRate = rateRef.current;
+      const playVideoElement = async (video: HTMLVideoElement, clipId?: string): Promise<void> => {
+        // Hawsh: a constant clip speed plays on the video element itself (see canUseNativeVideoPlayback).
+        video.playbackRate = rateRef.current * (clipId ? getSpeedEngine().getClipSpeed(clipId) : 1);
         if (!video.paused) {
           return;
         }
@@ -2671,9 +2681,9 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
                   : Promise.resolve(),
               ]);
               if (!isActive || !nativePlaybackActiveRef.current) return;
-              if (!outgoingHeld) await playVideoElement(clipAVideo);
+              if (!outgoingHeld) await playVideoElement(clipAVideo, clipARecord.clip.id);
               if (!incomingHeld && clipBVideo) {
-                await playVideoElement(clipBVideo);
+                await playVideoElement(clipBVideo, clipBRecord?.clip.id);
               }
 
               const blank = transitionInfo.clipB
@@ -2913,7 +2923,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
         );
         await syncVideoToClipTime(video, latestClip, currentPlayhead);
         if (!isActive || !nativePlaybackActiveRef.current) return;
-        await playVideoElement(video);
+        await playVideoElement(video, latestClip.id);
 
         const timeUntilClipEnd =
           latestClip.startTime + latestClip.duration - currentPlayhead;
@@ -3066,11 +3076,15 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
           );
         }
 
+        // Hawsh: effects on the graphics card when they all can; ctx.filter (which Safari may ignore)
+        // only as the fallback for CSS-only effects.
+        const fastFx = videoFrame === video ? clipFastEffects(clip.id) : null;
+        const fastFrame = fastFx ? renderFastEffects(clip.id, video, fastFx) : null;
         const nativeCssFilter =
-          videoFrame === video ? clipCssFilterOnly(clip.id) : null;
+          videoFrame === video && !fastFrame ? clipCssFilterOnly(clip.id) : null;
         drawFrameWithTransform(
           ctx,
-          videoFrame,
+          fastFrame ?? videoFrame,
           finalTransform,
           canvas.width,
           canvas.height,
@@ -3177,7 +3191,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
             cleanup(true);
             return () => {};
           }
-          await playVideoElement(startupVideo);
+          await playVideoElement(startupVideo, activeStartClip.clip.id);
         }
       }
 

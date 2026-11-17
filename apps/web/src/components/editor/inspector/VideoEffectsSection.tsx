@@ -16,6 +16,7 @@ import { ToolcraftIconButton as IconButton } from "@openreel/ui";
 import { ToolcraftPopover as Popover } from "@openreel/ui";
 import { ToolcraftText as Text } from "@openreel/ui";
 import { PropertySlider } from "./shell/PropertySlider";
+import { effectStrength } from "@openreel/core";
 import { useProjectStore } from "../../../stores/project-store";
 import type {
   VideoEffect,
@@ -210,8 +211,8 @@ const EffectItem: React.FC<{
         return (
           <EffectSlider
             label="Value"
-            value={effectNumberValue(effect.params.value, 0)}
-            onChange={(v) => onUpdate(effect.id, { value: v })}
+            value={effectStrength("brightness", effect.params.value) * 100}
+            onChange={(v) => onUpdate(effect.id, { value: v / 100 })}
             min={-100}
             max={100}
           />
@@ -267,8 +268,8 @@ const EffectItem: React.FC<{
           <>
             <EffectSlider
               label="Amount"
-              value={effectNumberValue(effect.params.amount, 0)}
-              onChange={(v) => onUpdate(effect.id, { amount: v })}
+              value={effectStrength("sharpen", effect.params.amount) * 100}
+              onChange={(v) => onUpdate(effect.id, { amount: v / 100 })}
               min={0}
               max={200}
               unit="%"
@@ -288,8 +289,8 @@ const EffectItem: React.FC<{
           <>
             <EffectSlider
               label="Amount"
-              value={effectNumberValue(effect.params.amount, 0)}
-              onChange={(v) => onUpdate(effect.id, { amount: v })}
+              value={effectStrength("vignette", effect.params.amount) * 100}
+              onChange={(v) => onUpdate(effect.id, { amount: v / 100 })}
               min={0}
               max={100}
             />
@@ -316,8 +317,8 @@ const EffectItem: React.FC<{
           <>
             <EffectSlider
               label="Amount"
-              value={effectNumberValue(effect.params.amount, 0)}
-              onChange={(v) => onUpdate(effect.id, { amount: v })}
+              value={effectStrength("grain", effect.params.amount) * 100}
+              onChange={(v) => onUpdate(effect.id, { amount: v / 100 })}
               min={0}
               max={100}
             />

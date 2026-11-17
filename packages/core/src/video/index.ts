@@ -1,5 +1,6 @@
 export * from "./video-engine";
 export * from "./canvas-fit";
+export * from "./effect-units";
 export * from "./video-effects-engine";
 export * from "./color-grading-engine";
 export * from "./color-grading-defaults";

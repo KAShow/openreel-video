@@ -5,6 +5,7 @@ import {
   type RendererConfig,
   isWebGPUSupported,
 } from "./renderer-factory";
+import { effectStrength } from "./effect-units";
 import { MotionShaderRenderer } from "../motion/motion-shader-renderer";
 import { getMotionShaderDef } from "../motion/shaders";
 import type { MotionShaderDef } from "../motion/shaders";
@@ -1262,20 +1263,21 @@ export class VideoEffectsEngine {
     const params = effect.params as Record<string, unknown>;
 
     switch (effect.type) {
+      // Strengths on the portable scale (effect-units.ts); the helpers below take that scale.
       case "sharpen": {
-        const amount = readEffectNumber(params.amount, 0);
+        const amount = effectStrength("sharpen", params.amount);
         this.applySharpenKernel(data, width, height, amount);
         break;
       }
       case "vignette": {
-        const vigAmount = readEffectNumber(params.amount, 0);
+        const vigAmount = effectStrength("vignette", params.amount);
         const midpoint = readEffectNumber(params.midpoint, 0.5);
         const feather = readEffectNumber(params.feather, 0.3);
         this.applyVignette(data, width, height, vigAmount, midpoint, feather);
         break;
       }
       case "grain": {
-        const grainAmount = readEffectNumber(params.amount, 0);
+        const grainAmount = effectStrength("grain", params.amount);
         this.applyGrain(data, grainAmount);
         break;
       }
@@ -1340,7 +1342,7 @@ export class VideoEffectsEngine {
     height: number,
     amount: number,
   ): void {
-    const normalizedAmount = amount / 100;
+    const normalizedAmount = amount;
     const copy = new Uint8ClampedArray(data);
     const kernel = [
       0,
@@ -1378,7 +1380,7 @@ export class VideoEffectsEngine {
     midpoint: number,
     feather: number,
   ): void {
-    const normalizedAmount = amount / 100;
+    const normalizedAmount = amount;
     const centerX = width / 2;
     const centerY = height / 2;
 
@@ -1409,8 +1411,7 @@ export class VideoEffectsEngine {
   }
 
   private applyGrain(data: Uint8ClampedArray, amount: number): void {
-    const normalizedAmount = amount / 100;
-    const intensity = normalizedAmount * 50;
+    const intensity = amount * 50;
     for (let i = 0; i < data.length; i += 4) {
       const noise = (Math.random() - 0.5) * intensity;
       data[i] = Math.max(0, Math.min(255, data[i] + noise));
@@ -1710,11 +1711,11 @@ export class VideoEffectsEngine {
 
   private buildCSSFilter(effect: Effect): string {
     const params = effect.params as Record<string, number | string>;
-    const value = typeof params.value === "number" ? params.value : 0;
 
     switch (effect.type) {
       case "brightness":
-        return `brightness(${1 + value / 100})`;
+        // Portable scale -1..1 (effect-units.ts), not percent.
+        return `brightness(${1 + effectStrength("brightness", params.value)})`;
       case "contrast":
         return `contrast(${readEffectNumber(params.value, 1)})`;
       case "saturation":
