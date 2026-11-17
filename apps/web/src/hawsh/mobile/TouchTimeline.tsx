@@ -305,7 +305,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
         className="h-full w-full overflow-x-auto overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{ touchAction: "pan-x pan-y" }}>
         <div className="relative" style={{ width, minHeight: "100%" }}>
-          <div className="relative h-6 text-[10px] text-fg-muted" aria-hidden>
+          <div className="relative h-6 text-[11px] text-fg-2" aria-hidden>
             {ticks.map((t) => (
               <div key={t} className="absolute top-0 flex h-full -translate-x-1/2 items-center" style={{ left: half + t * zoom }}>
                 {t % labelStep === 0 ? <span className="tabular-nums">{mmss(t)}</span> : <span className="h-1 w-1 rounded-full bg-fg-muted" />}

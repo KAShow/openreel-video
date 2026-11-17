@@ -23,6 +23,9 @@ vi.mock("./KeyframeEditorPanel", () => ({ KeyframeEditorPanel: () => null }));
 vi.mock("../audio-mixer", () => ({ AudioMixer: () => null }));
 vi.mock("./KeyboardShortcutsOverlay", () => ({ KeyboardShortcutsOverlay: () => null }));
 vi.mock("./tour", () => ({ SpotlightTour: () => null, MoGraphTour: () => null }));
+// The Hawsh editor (src/hawsh/mobile) is the editor on every screen now; these tests cover OpenReel's
+// own layout, which stays reachable with ?m=0.
+vi.mock("../../hawsh/mobile/phone", () => ({ usePhoneEditor: () => false }));
 
 function resize(width: number) {
   act(() => {

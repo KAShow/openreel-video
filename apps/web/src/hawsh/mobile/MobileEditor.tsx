@@ -25,6 +25,8 @@ import { ClipTools } from "./ClipTools";
 import { selectedTarget } from "./clip-tools";
 import { TextComposer } from "./AddSheets";
 import { PhoneExport } from "./PhoneExport";
+import { useWideEditor } from "./phone";
+import { Sheet, SIDE_PANEL_WIDTH, useSidePanelOpen } from "./ui";
 import { AudioSheet, CaptionsSheet, EditSheet, EffectsSheet, MoreSheet, TransitionsSheet } from "./ToolSheets";
 
 const ChatPanel = React.lazy(() => import("../../components/editor/chat/ChatPanel").then((m) => ({ default: m.ChatPanel })));
@@ -65,6 +67,10 @@ export const MobileEditor: React.FC = () => {
   const seekTo = useTimelineStore((s) => s.seekTo);
   const pause = useTimelineStore((s) => s.pause);
   const clearSelection = useUIStore((s) => s.clearSelection);
+  const wide = useWideEditor();
+  const sidePanel = useSidePanelOpen();
+  // Selecting a clip shows its own tools; the main sheet closes so the two never stack.
+  useEffect(() => { if (clipSelected) setSheet(null); }, [clipSelected]);
 
   const enterFullScreen = () => {
     clearSelection();
@@ -93,8 +99,9 @@ export const MobileEditor: React.FC = () => {
         <button type="button" onClick={() => setExporting(true)} className="h-9 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground">تصدير</button>
       </header>
 
+      <div className="flex min-h-0 flex-1 flex-col transition-[padding] duration-200" style={{ paddingRight: wide && sidePanel ? SIDE_PANEL_WIDTH : 0 }}>
       <section ref={previewBox} aria-label="المعاينة" data-testid="phone-preview"
-        className={fullScreen ? "fixed inset-0 z-[95] bg-black" : "relative min-h-0 shrink-0 basis-[44%] bg-black"}>
+        className={fullScreen ? "fixed inset-0 z-[95] bg-black" : `relative min-h-0 shrink-0 bg-black ${wide ? "basis-[52%]" : "basis-[44%]"}`}>
         <div className={`h-full w-full ${fullScreen ? "pointer-events-none pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)]" : ""}`}>
           <Preview hideControls />
         </div>
@@ -132,45 +139,39 @@ export const MobileEditor: React.FC = () => {
       <section className="relative min-h-0 flex-1 overflow-hidden border-t border-white/10 bg-bg" aria-label="الخط الزمني">
         <TouchTimeline onAddText={() => setSheet("text")} />
       </section>
+      </div>
 
       {clipSelected ? <ClipTools /> : (
-      <nav className="flex h-16 shrink-0 items-stretch bg-black pb-[env(safe-area-inset-bottom)]" dir="rtl" data-no-translate="" aria-label="أدوات المونتاج">
+      <nav className="flex h-16 shrink-0 justify-center bg-black pb-[env(safe-area-inset-bottom)]" dir="rtl" data-no-translate="" aria-label="أدوات المونتاج">
+        <div className="flex w-full max-w-3xl items-stretch">
         {TOOLS.map((t) => (
-          <button key={t.id} type="button" onClick={() => setSheet(t.id)}
+          <button key={t.id} type="button" onClick={() => setSheet(sheet === t.id ? null : t.id)}
             className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[11px] ${sheet === t.id ? "text-primary" : "text-fg"}`}>
             <t.icon size={22} strokeWidth={1.6} aria-hidden />
             {t.label}
           </button>
         ))}
+        </div>
       </nav>
       )}
 
-      {current && (
-        <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-black/40" onClick={() => setSheet(null)}>
-          <div role="dialog" aria-modal="true" aria-label={current.label} onClick={(e) => e.stopPropagation()}
-            className="flex max-h-[70%] min-h-[40%] flex-col rounded-t-2xl border-t border-border bg-bg shadow-xl">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3" dir="rtl" data-no-translate="">
-              <span className="text-sm font-bold">{current.label}</span>
-              <button type="button" aria-label="إغلاق" onClick={() => setSheet(null)} className="grid h-8 w-8 place-items-center rounded-full"><X size={20} /></button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]" dir="rtl" data-no-translate="">
-              {sheet === "captions" && <CaptionsSheet />}
-              {sheet === "text" && <TextComposer onDone={() => setSheet(null)} />}
-              {sheet === "transitions" && <TransitionsSheet />}
-              {sheet === "effects" && <EffectsSheet />}
-              {sheet === "audio" && <AudioSheet />}
-              {sheet === "edit" && <EditSheet onClose={() => setSheet(null)} />}
-              {sheet === "more" && <MoreSheet onOpenAssistant={() => setSheet("assistant")} />}
-              {sheet === "assistant" && (
-                <div className="h-[55vh]">
-                  <Suspense fallback={<div className="p-4 text-center text-xs text-fg-muted">…</div>}>
-                    <ChatPanel onClose={() => setSheet(null)} />
-                  </Suspense>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {current && current.id === "assistant" && (
+        <Sheet bare title={current.label} onClose={() => setSheet(null)} bodyClassName="p-0">
+          <Suspense fallback={<div className="p-4 text-center text-xs text-fg-muted">…</div>}>
+            <ChatPanel onClose={() => setSheet(null)} />
+          </Suspense>
+        </Sheet>
+      )}
+      {current && current.id !== "assistant" && (
+        <Sheet title={current.label} onClose={() => setSheet(null)}>
+          {sheet === "captions" && <CaptionsSheet />}
+          {sheet === "text" && <TextComposer onDone={() => setSheet(null)} />}
+          {sheet === "transitions" && <TransitionsSheet />}
+          {sheet === "effects" && <EffectsSheet />}
+          {sheet === "audio" && <AudioSheet />}
+          {sheet === "edit" && <EditSheet onClose={() => setSheet(null)} />}
+          {sheet === "more" && <MoreSheet onOpenAssistant={() => setSheet("assistant")} />}
+        </Sheet>
       )}
       {exporting && <PhoneExport onClose={() => setExporting(false)} />}
     </div>

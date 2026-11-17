@@ -168,7 +168,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
 
   // Start page (Hawsh Khalifa build): the saved projects right away, with "New project" beside them.
   return (
-    <div dir="rtl" data-ar className="fixed inset-0 z-50 flex flex-col bg-background">
+    <div dir="rtl" data-ar className="hawsh-readable fixed inset-0 z-50 flex flex-col bg-background">
       <header className="relative z-10 border-b border-border bg-background/95 backdrop-blur-xl">
         <div className="mx-auto flex h-[72px] w-full max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
           <div className="flex min-w-0 items-center gap-3">
