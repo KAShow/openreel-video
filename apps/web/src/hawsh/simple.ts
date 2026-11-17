@@ -34,8 +34,8 @@ export const SKIP_WELCOME = false;
  *  from the menu ("Editor tour"). */
 export const NO_AUTO_TOUR = true;
 
-/** One look, phone and computer alike (owner's decision 2026-10-31): always dark, Director's Eyes
- *  gold (tokens in index.css). The light theme and the theme button are gone. */
-export const DARK_ONLY = true;
+/** Dark only (owner, 2026-10-31) until 2026-11-17, when the owner asked for a theme switch and colours
+ *  (src/hawsh/appearance.ts). Dark with Director's Eyes gold stays the default. */
+export const DARK_ONLY = false;
 
 export const isHiddenSection = (id: string | undefined): boolean => !!id && HIDDEN_INSPECTOR_SECTIONS.has(id);

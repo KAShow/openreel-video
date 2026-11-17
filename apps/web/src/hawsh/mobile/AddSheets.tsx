@@ -74,7 +74,7 @@ export const AddMediaButton: React.FC<{ style: React.CSSProperties }> = ({ style
   return (
     <div onClick={(e) => e.stopPropagation()}>
       <button type="button" aria-label="أضف فيديو أو صورة" data-testid="add-media" onClick={() => { setBusy(null); setMenu(true); }} style={style}
-        className="absolute z-10 grid h-11 w-11 place-items-center rounded-lg bg-white text-black shadow-lg active:scale-95">
+        className="absolute z-10 grid h-11 w-11 place-items-center rounded-lg bg-[var(--on-chrome)] text-[var(--chrome)] shadow-lg active:scale-95">
         <Plus size={26} strokeWidth={2.2} />
       </button>
       <input ref={input} type="file" accept="video/*,image/*,audio/*" multiple hidden data-testid="add-media-file"

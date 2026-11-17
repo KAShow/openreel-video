@@ -66,7 +66,7 @@ const Filmstrip: React.FC<{ clip: RowClip; shownStart: number; width: number; zo
 const AddLane: React.FC<{ label: string; half: number; width: number; height: number; onClick: () => void }> = ({ label, half, width, height, onClick }) => (
   <div className="relative" style={{ height }}>
     <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className="absolute top-0 h-full rounded-md bg-white/[0.06] text-start text-xs text-fg-2 active:bg-white/10"
+      className="absolute top-0 h-full rounded-md bg-[var(--wash-soft)] text-start text-xs text-fg-2 active:bg-[var(--wash)]"
       style={{ left: half, width }}>
       <span className="sticky inline-flex h-full items-center gap-1 px-2" style={{ left: half }} dir="rtl">
         <Plus size={14} aria-hidden />{label}
@@ -331,7 +331,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
                         }}
                         className={`absolute top-0 h-full overflow-hidden rounded-md border-2 text-start [-webkit-touch-callout:none] ${isSelected(c.id) ? "border-white" : "border-transparent"} ${
                           row.kind === "video" ? "bg-bg-3" : row.kind === "text" ? "bg-amber-500/80" : "bg-teal-500/70"} ${
-                          moving?.id === c.id ? "z-20 -translate-y-1.5 opacity-60 shadow-xl ring-2 ring-white" : moving ? "transition-[left] duration-150" : ""}`}
+                          moving?.id === c.id ? "z-20 -translate-y-1.5 opacity-60 shadow-xl ring-2 ring-[var(--on-chrome)]" : moving ? "transition-[left] duration-150" : ""}`}
                         style={{ left, width: w }}>
                         {row.kind === "video" && <Filmstrip clip={c} shownStart={s.start} width={w} zoom={zoom} />}
                         {row.kind === "video" && Math.abs(c.speed - 1) > 0.001 && (

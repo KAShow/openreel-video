@@ -9,6 +9,7 @@ import { useEditorPreload } from "../../hooks/useEditorPreload";
 import { useAnalytics, AnalyticsEvents } from "../../hooks/useAnalytics";
 import { signOutHawsh, useHawshStore } from "../../hawsh/session";
 import { HAWSH_EDITOR_NAME, HAWSH_SIGN_IN_URL } from "../../hawsh/config";
+import { ThemeToggle } from "../../hawsh/AppearanceControls";
 
 const TemplateGallery = lazy(() =>
   import("./TemplateGallery").then((module) => ({ default: module.TemplateGallery })),
@@ -185,6 +186,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
               onClick={handleCreateProject}
               className="shrink-0 rounded-xl shadow-glow"
             />
+            <ThemeToggle className="border border-border bg-background-secondary text-text-primary hover:bg-background-tertiary" />
             <AccountButton />
           </div>
         </div>

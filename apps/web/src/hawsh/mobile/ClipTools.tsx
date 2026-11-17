@@ -93,10 +93,10 @@ export const ClipTools: React.FC = () => {
           {message}
         </div>
       )}
-      <nav className="flex h-16 shrink-0 justify-center bg-black pb-[env(safe-area-inset-bottom)]"
+      <nav className="flex h-16 shrink-0 justify-center bg-[var(--chrome)] pb-[env(safe-area-inset-bottom)]"
         dir="rtl" data-no-translate="" aria-label="أدوات اللقطة" data-testid="clip-tools">
         <div className="flex w-full max-w-3xl items-stretch overflow-x-auto [scrollbar-width:none]">
-        <button type="button" aria-label="إلغاء التحديد" onClick={() => clearSelection()} className="flex w-11 shrink-0 items-center justify-center border-e border-white/10"><X size={22} strokeWidth={1.6} /></button>
+        <button type="button" aria-label="إلغاء التحديد" onClick={() => clearSelection()} className="flex w-11 shrink-0 items-center justify-center border-e border-[var(--line)]"><X size={22} strokeWidth={1.6} /></button>
         {TOOLS.filter((t) => allowed.includes(t.id)).map((t) => (
           <button key={t.id} type="button" disabled={busy} onClick={() => onTool(t)}
             className={`flex min-w-[52px] flex-1 flex-col items-center justify-center gap-1 px-0.5 text-center text-[11px] leading-tight disabled:opacity-40 ${t.id === "delete" ? "text-red-400" : "text-fg"}`}>
@@ -172,7 +172,7 @@ export const SpeedControl: React.FC<{ clip: Clip; busy: boolean; onApply: (speed
       <div className="grid grid-cols-5 gap-2">
         {SPEEDS.map((s) => (
           <button key={s} type="button" disabled={busy} onClick={() => commit(s)}
-            className={`${btn} px-0 ${Math.abs(value - s) < 0.001 ? "border-primary text-primary" : ""}`}>{s}×</button>
+            className={`${btn} px-0 ${Math.abs(value - s) < 0.001 ? "border-primary bg-primary text-primary-foreground" : ""}`}>{s}×</button>
         ))}
       </div>
     </div>
