@@ -1,5 +1,71 @@
-/** Small shared pieces of the phone sheets: chips, a section with a title, and a commit-on-release slider. */
-import React, { useEffect, useState } from "react";
+/**
+ * Small shared pieces of the editor sheets: the sheet itself (a bottom sheet on phones, a side panel
+ * beside the preview on computers), chips, a section with a title, and a commit-on-release slider.
+ */
+import React, { useEffect, useState, useSyncExternalStore } from "react";
+import { X } from "lucide-react";
+import { useWideEditor } from "./phone";
+
+/** Width of the side panel on computers; the editor makes room for it while one is open. */
+export const SIDE_PANEL_WIDTH = 400;
+
+let openPanels = 0;
+const panelListeners = new Set<() => void>();
+const emitPanels = () => panelListeners.forEach((l) => l());
+
+/** Whether a side panel is open (computers only), so the preview and timeline can make room. */
+export function useSidePanelOpen(): boolean {
+  return useSyncExternalStore(
+    (cb) => { panelListeners.add(cb); return () => { panelListeners.delete(cb); }; },
+    () => openPanels > 0,
+    () => false,
+  );
+}
+
+/**
+ * A tool sheet. Phones: slides up from the bottom over a dim backdrop (tap outside to close).
+ * Computers: a panel on the right between the top bar and the tool bar, with the preview and
+ * timeline still visible and usable beside it.
+ */
+export const Sheet: React.FC<{
+  title: string; onClose: () => void; children: React.ReactNode; bodyClassName?: string; testId?: string;
+  /** No title bar: the content has its own (the assistant chat), so there is one close button, not two. */
+  bare?: boolean;
+}> = ({ title, onClose, children, bodyClassName = "", testId, bare = false }) => {
+  const wide = useWideEditor();
+  useEffect(() => {
+    if (!wide) return;
+    openPanels++; emitPanels();
+    return () => { openPanels--; emitPanels(); };
+  }, [wide]);
+
+  const header = bare ? null : (
+    <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+      <span className="text-sm font-bold text-fg">{title}</span>
+      <button type="button" aria-label="إغلاق" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-fg active:bg-white/10"><X size={20} /></button>
+    </div>
+  );
+  const body = bare
+    ? <div className={`flex min-h-0 flex-1 flex-col ${wide ? "" : "h-[70vh]"}`}>{children}</div>
+    : <div className={`min-h-0 flex-1 overflow-y-auto p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] ${bodyClassName}`}>{children}</div>;
+
+  if (wide) {
+    return (
+      <aside role="dialog" aria-label={title} dir="rtl" data-no-translate={bare ? undefined : ""} data-testid={testId}
+        className="fixed bottom-16 right-0 top-12 z-[80] flex flex-col border-s border-border bg-bg shadow-2xl" style={{ width: SIDE_PANEL_WIDTH }}>
+        {header}{body}
+      </aside>
+    );
+  }
+  return (
+    <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-black/50" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label={title} dir="rtl" data-no-translate={bare ? undefined : ""} data-testid={testId} onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[75%] min-h-[40%] flex-col rounded-t-2xl border-t border-border bg-bg shadow-xl">
+        {header}{body}
+      </div>
+    </div>
+  );
+};
 
 export const chip = "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold active:scale-95 disabled:opacity-40";
 export const chipOn = "border-primary bg-primary/15 text-primary";

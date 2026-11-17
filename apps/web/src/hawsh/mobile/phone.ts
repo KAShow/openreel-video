@@ -1,11 +1,14 @@
 /**
- * Phone editor (Hawsh Khalifa build, plan mds/plans/2026-10-23-editor-mobile-ui.md): phones only
- * (owner: tablets keep the current layout). On by default since 2026-10-30; `?m=0` switches this
- * browser back to the desktop layout (remembered), `?m=1` undoes that.
+ * Phone editor (Hawsh Khalifa build, plan mds/plans/2026-10-23-editor-mobile-ui.md). Since 2026-11-17
+ * (owner: "the computer should match the phone") it is the editor on every screen, with a wider
+ * layout on computers (useWideEditor). `?m=0` switches this browser back to OpenReel's desktop
+ * layout (remembered), `?m=1` undoes that.
  */
 import { useSyncExternalStore } from "react";
 
 export const PHONE_QUERY = "(max-width: 600px)";
+/** Screens where the editor puts the tool sheets beside the preview instead of over it. */
+export const WIDE_QUERY = "(min-width: 900px)";
 const FLAG_KEY = "hawsh-mobile-ui";
 
 /** Reads `?m=0` / `?m=1` from the address and remembers it. */
@@ -20,14 +23,24 @@ export function mobileUiEnabled(search: string = typeof location !== "undefined"
   }
 }
 
-function subscribe(onChange: () => void): () => void {
-  const media = window.matchMedia(PHONE_QUERY);
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
+function useMedia(query: string): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const media = window.matchMedia(query);
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(query).matches,
+    () => false,
+  );
 }
 
-/** True on a phone-width screen unless this browser switched to the desktop layout. */
+/** True unless this browser switched back to the desktop layout with `?m=0`. */
 export function usePhoneEditor(): boolean {
-  const phone = useSyncExternalStore(subscribe, () => window.matchMedia(PHONE_QUERY).matches, () => false);
-  return phone && mobileUiEnabled();
+  return mobileUiEnabled();
+}
+
+/** A computer-width screen: same editor, wider arrangement. */
+export function useWideEditor(): boolean {
+  return useMedia(WIDE_QUERY);
 }

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { CaptionStyleEditor } from "../CaptionStyleEditor";
 import { EffectsSheet } from "./ToolSheets";
+import { Sheet as ToolSheet } from "./ui";
 import { useProjectStore } from "../../stores/project-store";
 import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
@@ -92,8 +93,9 @@ export const ClipTools: React.FC = () => {
           {message}
         </div>
       )}
-      <nav className="flex h-16 shrink-0 items-stretch overflow-x-auto bg-black pb-[env(safe-area-inset-bottom)] [scrollbar-width:none]"
+      <nav className="flex h-16 shrink-0 justify-center bg-black pb-[env(safe-area-inset-bottom)]"
         dir="rtl" data-no-translate="" aria-label="أدوات اللقطة" data-testid="clip-tools">
+        <div className="flex w-full max-w-3xl items-stretch overflow-x-auto [scrollbar-width:none]">
         <button type="button" aria-label="إلغاء التحديد" onClick={() => clearSelection()} className="flex w-11 shrink-0 items-center justify-center border-e border-white/10"><X size={22} strokeWidth={1.6} /></button>
         {TOOLS.filter((t) => allowed.includes(t.id)).map((t) => (
           <button key={t.id} type="button" disabled={busy} onClick={() => onTool(t)}
@@ -102,16 +104,11 @@ export const ClipTools: React.FC = () => {
             {t.label}
           </button>
         ))}
+        </div>
       </nav>
 
       {sheet && (
-        <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-black/40" onClick={() => setSheet(null)}>
-          <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} dir="rtl" data-no-translate=""
-            className="max-h-[75vh] overflow-y-auto rounded-t-2xl border-t border-border bg-bg p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-bold">{TOOLS.find((t) => t.sheet === sheet)?.label}</span>
-              <button type="button" aria-label="إغلاق" onClick={() => setSheet(null)} className="grid h-8 w-8 place-items-center rounded-full"><X size={20} /></button>
-            </div>
+        <ToolSheet title={TOOLS.find((t) => t.sheet === sheet)?.label ?? ""} onClose={() => setSheet(null)}>
             {sheet === "edit" && target.kind === "text-clip" && (
               <TextEditor key={target.id} initial={target.text} onSave={(text) => { if (editText(target.id, text)) setSheet(null); else setMessage(FAILED); }} />
             )}
@@ -133,8 +130,7 @@ export const ClipTools: React.FC = () => {
             )}
             {sheet === "volume" && target.kind === "clip" && <VolumeControl key={target.id} clipId={target.id} volume={target.clip.volume ?? 1} />}
             {sheet === "silence" && target.kind === "clip" && <SilenceControl key={target.id} clipId={target.id} onDone={() => setSheet(null)} />}
-          </div>
-        </div>
+        </ToolSheet>
       )}
     </>
   );
