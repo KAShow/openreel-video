@@ -21,5 +21,10 @@ export function resolvePlaybackStart(
 ): number {
   const safePosition = Number.isFinite(position) ? Math.max(0, position) : 0;
   if (loop && (safePosition < loop.start || safePosition >= loop.end)) return loop.start;
-  return safePosition >= duration ? 0 : safePosition;
+  // Within the last tenth of a second counts as the end (Hawsh build): playback that ends on its own
+  // leaves the playhead a frame or two short, and play there must start over like CapCut does.
+  return safePosition >= duration - END_TOLERANCE ? 0 : safePosition;
 }
+
+/** Seconds before the end that already count as "at the end" when play is pressed. */
+export const END_TOLERANCE = 0.1;

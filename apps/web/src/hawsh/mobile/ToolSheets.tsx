@@ -3,7 +3,7 @@
  * sound, edit and more, plus the captions sheet with its style tab. The work itself is in cuts.ts,
  * effect-tools.ts, audio-tools.ts and project-tools.ts.
  */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Clapperboard, Mic, Music, Square } from "lucide-react";
 import { useProjectStore } from "../../stores/project-store";
 import { useTimelineStore } from "../../stores/timeline-store";
@@ -32,11 +32,21 @@ import {
 import { currentFormat, cutSilenceEverywhere, FORMATS, planSilenceEverywhere, setFormat, setReversed, type SilencePlan } from "./project-tools";
 import { bigButton, chip, chipOff, chipOn, Note, primaryButton, Row, Slider, useNote } from "./ui";
 
+/** The playhead at the moment of a tap (sheets do not re-render on every frame of playback). */
+const playheadNow = () => useTimelineStore.getState().playheadPosition;
+
 const useTarget = () => {
   const project = useProjectStore((s) => s.project);
   const selected = useUIStore((s) => s.selectedItems);
-  const playhead = useTimelineStore((s) => s.playheadPosition);
-  return { project, target: sheetTarget(project, selected, playhead), playhead };
+  // Re-render when the clip under the playhead changes, not on every frame.
+  const targetId = useTimelineStore((s) => sheetTarget(project, selected, s.playheadPosition)?.clip.id ?? null);
+  const target = useMemo(() => {
+    if (!targetId) return null;
+    // Asking at the clip's own start finds the same clip as asking at the playhead.
+    const start = project.timeline.tracks.flatMap((t) => t.clips).find((c) => c.id === targetId)?.startTime ?? playheadNow();
+    return sheetTarget(project, selected, start);
+  }, [project, selected, targetId]);
+  return { project, target };
 };
 
 const mediaType = (project: ReturnType<typeof useProjectStore.getState>["project"], mediaId: string) =>
@@ -46,11 +56,10 @@ const mediaType = (project: ReturnType<typeof useProjectStore.getState>["project
 
 export const TransitionsSheet: React.FC = () => {
   const project = useProjectStore((s) => s.project);
-  const playhead = useTimelineStore((s) => s.playheadPosition);
   const seekTo = useTimelineStore((s) => s.seekTo);
   const cuts = mainCuts(project);
   const [index, setIndex] = useState(() => {
-    const near = nearestCut(cuts, playhead);
+    const near = nearestCut(cuts, playheadNow());
     return near ? cuts.indexOf(near) : 0;
   });
   const [seconds, setSeconds] = useState(DEFAULT_TRANSITION_SECONDS);
@@ -230,7 +239,7 @@ const Recorder: React.FC<{ onDone: (file: File, start: number) => Promise<void> 
 };
 
 export const AudioSheet: React.FC = () => {
-  const { project, target, playhead } = useTarget();
+  const { project, target } = useTarget();
   const signedIn = useHawshStore((s) => s.status === "ready");
   const [library, setLibrary] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -252,7 +261,7 @@ export const AudioSheet: React.FC = () => {
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
           e.target.value = "";
-          if (files.length) void run("جارٍ إضافة الصوت…", async () => { const r = await importAudio(files, playhead); return added(r.placed, r.failed); });
+          if (files.length) void run("جارٍ إضافة الصوت…", async () => { const r = await importAudio(files, playheadNow()); return added(r.placed, r.failed); });
         }} />
       <button type="button" disabled={!!busy} onClick={() => input.current?.click()} className={bigButton}>
         <Music size={22} className="shrink-0" aria-hidden />
@@ -265,7 +274,7 @@ export const AudioSheet: React.FC = () => {
         </button>
       )}
       <Recorder onDone={async (file, start) => { const r = await importAudio([file], start); setNote(added(r.placed, r.failed)); }} />
-      {library && <HawshLibraryDialog onClose={() => setLibrary(false)} onAdded={async (ids) => { const n = await placeAudio(ids, playhead); setNote(n ? "أُضيف الصوت عند المؤشر الأبيض." : "اختر ملفاً صوتياً."); }} />}
+      {library && <HawshLibraryDialog onClose={() => setLibrary(false)} onAdded={async (ids) => { const n = await placeAudio(ids, playheadNow()); setNote(n ? "أُضيف الصوت عند المؤشر الأبيض." : "اختر ملفاً صوتياً."); }} />}
 
       <Row label="صوت الفيديو الأصلي">
         <div className="grid grid-cols-2 gap-2">
@@ -421,7 +430,7 @@ export const MoreSheet: React.FC<{ onOpenAssistant: () => void }> = ({ onOpenAss
 
 export const CaptionsSheet: React.FC = () => {
   const project = useProjectStore((s) => s.project);
-  const playhead = useTimelineStore((s) => s.playheadPosition);
+  const captionClip = useTimelineStore((s) => captionClipId(project, s.playheadPosition));
   const has = captionClips(project).length > 0;
   const [tab, setTab] = useState<"make" | "style">(has ? "style" : "make");
   return (
@@ -431,7 +440,7 @@ export const CaptionsSheet: React.FC = () => {
         <button type="button" className={`${chip} ${tab === "style" ? chipOn : chipOff} py-2`} onClick={() => setTab("style")}>شكل الترجمة</button>
       </div>
       {tab === "make"
-        ? <ServerCaptionPanel clipId={captionClipId(project, playhead)} buttonLabel="فرّغ المقطع اللي تحت المؤشر" emptyHint="أضف فيديو فيه كلام أولاً." />
+        ? <ServerCaptionPanel clipId={captionClip} buttonLabel="فرّغ المقطع اللي تحت المؤشر" emptyHint="أضف فيديو فيه كلام أولاً." />
         : <CaptionStyleEditor />}
     </div>
   );

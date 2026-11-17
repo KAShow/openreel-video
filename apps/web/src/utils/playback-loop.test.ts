@@ -17,6 +17,13 @@ describe("preview loop bounds", () => {
     expect(resolvePlaybackStart(2, 10, null)).toBe(2);
     expect(resolvePlaybackStart(10, 10, null)).toBe(0);
   });
+  it("starts again from the beginning when the playhead stopped just short of the end", () => {
+    // Playback that ends on its own leaves the playhead a frame or two before the end (11.95 of 12
+    // was measured); pressing play there must start over, not play the last frame and stop.
+    expect(resolvePlaybackStart(11.95, 12, null)).toBe(0);
+    expect(resolvePlaybackStart(11.999, 12, null)).toBe(0);
+    expect(resolvePlaybackStart(11.5, 12, null)).toBe(11.5);
+  });
   it("starts outside-range playback at the in point and preserves in-range positions", () => {
     const range = { start: 2, end: 4 };
     expect(resolvePlaybackStart(0, 10, range)).toBe(2);
