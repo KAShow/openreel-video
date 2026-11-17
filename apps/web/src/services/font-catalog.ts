@@ -56,4 +56,13 @@ export const GOOGLE_FONT_SPECS: Readonly<Record<string, string>> = {
   "Work Sans": "Work Sans:wght@300;400;500;600;700;800",
   "Yellowtail": "Yellowtail",
   "Zilla Slab": "Zilla Slab:wght@300;400;500;600;700",
+  // Arabic caption fonts (Hawsh Khalifa build, hawsh/caption-style.ts).
+  "Cairo": "Cairo:wght@400;600;700;800;900",
+  "Tajawal": "Tajawal:wght@400;500;700;800;900",
+  "Almarai": "Almarai:wght@400;700;800",
+  "Changa": "Changa:wght@400;600;700;800",
+  "Lalezar": "Lalezar",
+  "Noto Kufi Arabic": "Noto Kufi Arabic:wght@400;600;700;800;900",
+  "Reem Kufi": "Reem Kufi:wght@400;600;700",
+  "Amiri": "Amiri:wght@400;700",
 };

@@ -10,10 +10,11 @@
  * cancelled the draft is discarded, so the words are kept for this page session: asking again for the
  * same clip reuses them without a second charge, and the chat says so (transcribeChargeNotice).
  */
-import { SUBTITLE_STYLE_PRESETS, projectUsesUniversalTracks, type Clip, type Project, type Track, type TranscriptionSegment } from "@openreel/core";
+import { projectUsesUniversalTracks, type Clip, type Project, type Track, type TranscriptionSegment } from "@openreel/core";
 import { TitleEngine } from "@openreel/core/text/title-engine";
 import type { EditingHost, ToolCall, ToolResult } from "@openreel/agent";
 import { msg } from "./i18n/messages";
+import { defaultCaptionLook, lookStyle } from "./caption-look";
 import { loadTranscribePrice, NoSpeechError, transcribeClip, transcribePoints, wordsToCaptions, type Word } from "./transcribe";
 
 export const TRANSCRIBE_TOOL = "transcribe_clip";
@@ -146,8 +147,9 @@ export async function transcribeClipTool(args: Record<string, unknown>, host: Dr
 
   const target = await captionsTrack(host);
   host.allowNonPortableDraft?.();
-  const style = SUBTITLE_STYLE_PRESETS.default;
-  const y = style.position === "top" ? 0.15 : style.position === "center" ? 0.5 : 0.85;
+  const look = defaultCaptionLook(host.getProject().settings);
+  const style = lookStyle(look);
+  const y = look.y;
   const titles = new TitleEngine();
   for (const s of segments) {
     const text = titles.createTextClip({
@@ -155,7 +157,7 @@ export async function transcribeClipTool(args: Record<string, unknown>, host: Dr
       startTime: s.startTime,
       duration: s.endTime - s.startTime,
       text: s.text,
-      style: { fontFamily: style.fontFamily, fontSize: style.fontSize, color: style.color, backgroundColor: style.backgroundColor || undefined, textAlign: "center" },
+      style,
       transform: { position: { x: 0.5, y } },
       metadata: { captionSource: "whisper", captionSourceClipId: clipId, captionMaxWordsPerLine: maxWords },
     });

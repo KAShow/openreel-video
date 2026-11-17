@@ -20,7 +20,8 @@ import { useUIStore } from "../../stores/ui-store";
 import { frameAt, timelineRows, type RowClip, type RowKind } from "./rows";
 import { edgeCutTime, selectedTarget, trimAt } from "./clip-tools";
 import { AddMediaButton } from "./AddSheets";
-import { importFiles, mainTrack } from "./add-tools";
+import { mainTrack } from "./add-tools";
+import { importAudio } from "./audio-tools";
 import { moveOnTrack, reorderPlan, type Slot } from "../reorder";
 import { toast } from "../../stores/notification-store";
 import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, ZOOM_STEP, clampZoom, pinchZoom, rulerStep } from "./zoom";
@@ -392,7 +393,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
         </div>
       </div>
       <input ref={audioInput} type="file" accept="audio/*" multiple hidden data-testid="add-audio-file"
-        onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; if (files.length) void importFiles(files); }} />
+        onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; if (files.length) void importAudio(files, 0); }} />
       {/* Fixed playhead in the middle. */}
       <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)]" aria-hidden />
       {!moving && (

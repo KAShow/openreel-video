@@ -7,6 +7,7 @@ import { EDITING_SYSTEM, editingToolDefs, editingToolNeedsConfirm, editingToolRe
 import { toolLabel } from "../components/editor/chat/tool-labels";
 import { clearTranscribeCache, transcribeChargeNotice, transcribeConfirmNote, transcribePointsCharged } from "./transcribe-tool";
 import { transcribeClip, loadTranscribePrice, NoSpeechError } from "./transcribe";
+import { defaultCaptionLook } from "./caption-look";
 
 vi.mock("./transcribe", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./transcribe")>()),
@@ -99,8 +100,11 @@ describe("transcribe_clip tool", () => {
       expect.objectContaining({ trackId: captions.id, text: "أهلاً وسهلاً.", startTime: 2 }),
     ]);
     expect(draft.textClips![0].duration).toBeCloseTo(1.05);
-    expect(draft.textClips![0].transform.position).toEqual({ x: 0.5, y: 0.85 });
-    expect(draft.textClips![0].style.textAlign).toBe("center");
+    // The phone-readable caption look (caption-look.ts), not OpenReel's 22–32px subtitle presets.
+    const look = defaultCaptionLook(draft.settings);
+    expect(draft.textClips![0].transform.position).toEqual({ x: 0.5, y: look.y });
+    expect(draft.textClips![0].style).toMatchObject({ textAlign: "center", fontSize: look.fontSize, fontFamily: "Cairo", strokeColor: "#000000" });
+    expect(look.fontSize).toBeGreaterThanOrEqual(60);
     // Nothing reaches the live project before the turn commits.
     expect(useProjectStore.getState().project.textClips ?? []).toHaveLength(0);
 

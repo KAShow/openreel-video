@@ -5,8 +5,10 @@
  */
 import React, { useEffect, useState } from "react";
 import {
-  AudioWaveform, Copy, Gauge, Pencil, Scissors, SquareSplitHorizontal, Trash2, Volume2, X, type LucideIcon,
+  AudioWaveform, Copy, Gauge, Palette, Pencil, Scissors, Sparkles, SquareSplitHorizontal, Trash2, Volume2, X, type LucideIcon,
 } from "lucide-react";
+import { CaptionStyleEditor } from "../CaptionStyleEditor";
+import { EffectsSheet } from "./ToolSheets";
 import { useProjectStore } from "../../stores/project-store";
 import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
@@ -22,13 +24,15 @@ import {
 import { editText } from "./add-tools";
 import { TextEditor } from "./AddSheets";
 
-type Sheet = "edit" | "trim" | "speed" | "volume" | "silence";
+type Sheet = "edit" | "style" | "effects" | "trim" | "speed" | "volume" | "silence";
 interface Tool { id: string; label: string; icon: LucideIcon; sheet?: Sheet; run?: (t: Target, time: number) => Promise<string | null> }
 
 const TOOLS: Tool[] = [
   { id: "edit", label: "تعديل", icon: Pencil, sheet: "edit" },
+  { id: "style", label: "الشكل", icon: Palette, sheet: "style" },
   { id: "split", label: "تقسيم", icon: SquareSplitHorizontal, run: splitAt },
   { id: "trim", label: "قص", icon: Scissors, sheet: "trim" },
+  { id: "effects", label: "مؤثرات", icon: Sparkles, sheet: "effects" },
   { id: "speed", label: "سرعة", icon: Gauge, sheet: "speed" },
   { id: "volume", label: "صوت", icon: Volume2, sheet: "volume" },
   { id: "silence", label: "قص السكتات", icon: AudioWaveform, sheet: "silence" },
@@ -36,11 +40,12 @@ const TOOLS: Tool[] = [
   { id: "delete", label: "حذف", icon: Trash2, run: remove },
 ];
 
-/** Which tools fit the target: text has no media; still images have no speed or sound. */
+/** Which tools fit the target: text has no media; still images have no speed or sound; audio has no picture. */
 export function toolsFor(t: Target): string[] {
-  if (t.kind === "text-clip") return ["edit", "split", "trim", "delete"];
-  if (t.trackType === "image") return ["split", "trim", "duplicate", "delete"];
-  return TOOLS.map((x) => x.id).filter((id) => id !== "edit");
+  if (t.kind === "text-clip") return ["edit", "style", "split", "trim", "delete"];
+  if (t.trackType === "image") return ["split", "trim", "effects", "duplicate", "delete"];
+  const skip = new Set(["edit", "style", ...(t.trackType === "audio" ? ["effects"] : [])]);
+  return TOOLS.map((x) => x.id).filter((id) => !skip.has(id));
 }
 
 const btn = "rounded-xl border border-border bg-bg-1 px-3 py-3 text-sm font-semibold active:bg-bg-2 disabled:opacity-40";
@@ -102,7 +107,7 @@ export const ClipTools: React.FC = () => {
       {sheet && (
         <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-black/40" onClick={() => setSheet(null)}>
           <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} dir="rtl" data-no-translate=""
-            className="rounded-t-2xl border-t border-border bg-bg p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl">
+            className="max-h-[75vh] overflow-y-auto rounded-t-2xl border-t border-border bg-bg p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm font-bold">{TOOLS.find((t) => t.sheet === sheet)?.label}</span>
               <button type="button" aria-label="إغلاق" onClick={() => setSheet(null)} className="grid h-8 w-8 place-items-center rounded-full"><X size={20} /></button>
@@ -110,6 +115,8 @@ export const ClipTools: React.FC = () => {
             {sheet === "edit" && target.kind === "text-clip" && (
               <TextEditor key={target.id} initial={target.text} onSave={(text) => { if (editText(target.id, text)) setSheet(null); else setMessage(FAILED); }} />
             )}
+            {sheet === "style" && target.kind === "text-clip" && <CaptionStyleEditor key={target.id} clipId={target.id} />}
+            {sheet === "effects" && target.kind === "clip" && <EffectsSheet key={target.id} clipId={target.id} />}
             {sheet === "trim" && (
               <div className="space-y-2">
                 <p className="text-xs text-fg-muted">{canCutAt(target, playhead) ? "يقص عند المؤشر الأبيض." : NOT_UNDER_PLAYHEAD}</p>
