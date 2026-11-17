@@ -10,7 +10,7 @@ vi.mock("./hooks/useKieAIPoller", () => ({ useKieAIPoller: () => undefined }));
 vi.mock("./components/MobileBlocker", () => ({ MobileBlocker: () => null }));
 vi.mock("./components/Toast", () => ({ ToastContainer: () => null }));
 vi.mock("./components/editor/EditorInterface", () => ({ EditorInterface: () => <p>Editor</p> }));
-vi.mock("./components/welcome", () => ({ WelcomeScreen: () => <p>Welcome</p> }));
+vi.mock("./components/welcome/WelcomeScreen", () => ({ WelcomeScreen: () => <p>Welcome</p> }));
 
 const save = (id: string, projectId: string, timestamp: number): AutoSaveMetadata => ({
   id, projectId, projectName: projectId, timestamp, slot: 0, isRecovery: true,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ToolcraftText as Text } from "@openreel/ui";
+// Hawsh: the file itself; the @openreel/ui index brings framer-motion into the start page.
+import { ToolcraftText as Text } from "@openreel/ui/components/toolcraft-text";
 
 export function supportsBrowserEditing(): boolean {
   try {

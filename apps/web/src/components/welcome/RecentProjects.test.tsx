@@ -15,8 +15,10 @@ vi.mock("../../services/auto-save", () => ({
 }));
 
 vi.mock("../../stores/project-store", () => ({
-  useProjectStore: (selector: (state: unknown) => unknown) =>
-    selector({ recoverFromAutoSave: mockRecoverFromAutoSave }),
+  useProjectStore: {
+    getState: () => ({ recoverFromAutoSave: mockRecoverFromAutoSave }),
+    subscribe: () => () => undefined,
+  },
 }));
 
 vi.mock("../../hooks/useAnalytics", () => ({

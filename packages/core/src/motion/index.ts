@@ -39,7 +39,9 @@ export * from "./motion-gpu-blend";
 export * from "./motion-gpu-compositor";
 export * from "./motion-gpu-render";
 export * from "./motion-scene3d";
-export * from "./motion-three-renderer";
+// Hawsh: values from the three-free part only, so importing this index does not load three.js.
+export * from "./motion-three-shared";
+export type * from "./motion-three-renderer";
 export * from "./shaders";
 export * from "./native-aurora-bridge";
 export * from "./motion-shape-path";

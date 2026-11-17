@@ -72,6 +72,7 @@ import {
   type TimelineClipboardItem,
 } from "./project/index";
 import { saveMediaBlob } from "../services/media-storage";
+import { registerProjectStore } from "../hawsh/project-gateway";
 
 /**
  * ProjectState - Complete state interface for project management
@@ -2829,3 +2830,6 @@ export const useProjectStore = create<ProjectState>()(
     };
   }),
 );
+
+// Hawsh: lets the start page (hawsh/project-gateway) see this store however it was loaded.
+registerProjectStore(useProjectStore);

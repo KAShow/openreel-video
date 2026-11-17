@@ -21,6 +21,14 @@ import type {
   MotionScene3DLighting,
   MotionScene3DRoom,
 } from "./types";
+import {
+  DEFAULT_ENVIRONMENT_INTENSITY,
+  DEFAULT_MOTION_RENDER_QUALITY,
+  mergeMotionRenderQuality,
+  type MotionRenderQuality,
+  type MotionToneMapping,
+} from "./motion-three-shared";
+export * from "./motion-three-shared";
 
 interface Vec3 {
   readonly x: number;
@@ -80,15 +88,6 @@ export interface MotionThreeSceneInput {
   readonly room?: MotionScene3DRoom;
 }
 
-/** View transform applied at present time — "agx" matches the Blender 4.x look. */
-export type MotionToneMapping =
-  | "agx"
-  | "aces"
-  | "filmic"
-  | "neutral"
-  | "linear"
-  | "none";
-
 /** Image-based-lighting world preset. Drives reflections + ambient fill. */
 export type MotionEnvironmentPreset =
   | "studio"
@@ -98,56 +97,6 @@ export type MotionEnvironmentPreset =
   | "city"
   | "dark"
   | "none";
-
-export interface MotionRenderQuality {
-  readonly shadows: boolean;
-  readonly shadowMapSize: number;
-  readonly environment: boolean;
-  /** Cinematic post-processing (bloom + optional AO/DOF). Off for fast preview. */
-  readonly postProcessing?: boolean;
-  /** UnrealBloom strength when postProcessing is on. */
-  readonly bloomStrength?: number;
-  /** Screen-space ambient occlusion (GTAO) — grounds objects with contact shadows. */
-  readonly ambientOcclusion?: boolean;
-  /** Cinematic depth-of-field (Bokeh): focal plane on the camera target. */
-  readonly depthOfField?: boolean;
-  /** DOF aperture (blur strength) when depthOfField is on. */
-  readonly dofAperture?: number;
-  /** MSAA samples for the post-processing pipeline (0 disables; 4 is a good default). */
-  readonly antialiasSamples?: number;
-  /** View transform / tonemap applied on present. Defaults to AgX (the Blender look). */
-  readonly toneMapping?: MotionToneMapping;
-  /** Tonemap exposure multiplier. */
-  readonly exposure?: number;
-  /** Soft area (softbox) key light for product-grade speculars. */
-  readonly softLighting?: boolean;
-  /** Image-based-lighting intensity (reflections + ambient fill). */
-  readonly environmentIntensity?: number;
-}
-
-export const DEFAULT_ENVIRONMENT_INTENSITY = 0.85;
-
-export const DEFAULT_MOTION_RENDER_QUALITY: MotionRenderQuality = {
-  shadows: true,
-  shadowMapSize: 2048,
-  environment: true,
-  postProcessing: true,
-  bloomStrength: 0.34,
-  ambientOcclusion: true,
-  depthOfField: true,
-  dofAperture: 0.0016,
-  antialiasSamples: 4,
-  toneMapping: "agx",
-  exposure: 1,
-  softLighting: true,
-  environmentIntensity: DEFAULT_ENVIRONMENT_INTENSITY,
-};
-
-export function mergeMotionRenderQuality(
-  partial?: Partial<MotionRenderQuality>,
-): MotionRenderQuality {
-  return { ...DEFAULT_MOTION_RENDER_QUALITY, ...(partial ?? {}) };
-}
 
 export function resolveMotionToneMapping(
   mapping: MotionToneMapping | undefined,
@@ -1608,26 +1557,6 @@ function buildSoccerBall(
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 64, 48), mat);
   return { root: mesh, texture };
-}
-
-export function sampleMotionObjectMeshFrame(
-  object: MotionObject3D,
-  timeSeconds: number,
-): MotionObject3D {
-  const frames = object.meshFrames;
-  if (!frames || frames.frames.length === 0 || frames.fps <= 0) return object;
-  const count = frames.frames.length;
-  const raw = Math.floor(timeSeconds * frames.fps);
-  const index = frames.loop
-    ? ((raw % count) + count) % count
-    : Math.max(0, Math.min(count - 1, raw));
-  const positions = frames.frames[index] ?? frames.frames[count - 1]!;
-  if (positions.length < 9 || frames.indices.length < 3) return object;
-  const { meshFrames: _meshFrames, ...rest } = object;
-  return {
-    ...rest,
-    mesh: { positions, indices: frames.indices, uvs: frames.uvs, preScaled: true },
-  };
 }
 
 function buildBufferGeometryFromMesh(

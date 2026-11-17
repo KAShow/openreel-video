@@ -4,23 +4,27 @@ import { MobileEditor } from "../../hawsh/mobile/MobileEditor";
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { SplashScreen } from "../SplashScreen";
 
-import { Toolbar } from "./Toolbar";
-import { EditorActionRail } from "./EditorActionRail";
-import { AssetsPanel } from "./AssetsPanel";
 import { Preview } from "./Preview";
-import { InspectorPanel } from "./InspectorPanel";
-import { Timeline } from "./Timeline";
-import { KeyframeEditorPanel } from "./KeyframeEditorPanel";
-import { AudioMixer } from "../audio-mixer";
-import { KeyboardShortcutsOverlay } from "./KeyboardShortcutsOverlay";
 import { PanelErrorBoundary } from "../ErrorBoundary";
-import { SpotlightTour, MoGraphTour } from "./tour";
 import { useProjectStore } from "../../stores/project-store";
 import { useUIStore } from "../../stores/ui-store";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { useEditorInitialization } from "../../hooks/useEditorInitialization";
 import { useCompactEditor } from "../../hooks/useCompactEditor";
 import "./editor-responsive.css";
+
+// Hawsh: the desktop layout (?m=0 only) loads as one lazy chunk; the phone editor never needs it.
+const desktopPanels = () => import("../../hawsh/desktop-panels");
+const Toolbar = React.lazy(() => desktopPanels().then((m) => ({ default: m.Toolbar })));
+const EditorActionRail = React.lazy(() => desktopPanels().then((m) => ({ default: m.EditorActionRail })));
+const AssetsPanel = React.lazy(() => desktopPanels().then((m) => ({ default: m.AssetsPanel })));
+const InspectorPanel = React.lazy(() => desktopPanels().then((m) => ({ default: m.InspectorPanel })));
+const Timeline = React.lazy(() => desktopPanels().then((m) => ({ default: m.Timeline })));
+const KeyframeEditorPanel = React.lazy(() => desktopPanels().then((m) => ({ default: m.KeyframeEditorPanel })));
+const AudioMixer = React.lazy(() => desktopPanels().then((m) => ({ default: m.AudioMixer })));
+const KeyboardShortcutsOverlay = React.lazy(() => desktopPanels().then((m) => ({ default: m.KeyboardShortcutsOverlay })));
+const SpotlightTour = React.lazy(() => desktopPanels().then((m) => ({ default: m.SpotlightTour })));
+const MoGraphTour = React.lazy(() => desktopPanels().then((m) => ({ default: m.MoGraphTour })));
 
 const ChatPanel = React.lazy(() =>
   import("./chat/ChatPanel").then((module) => ({ default: module.ChatPanel })),
@@ -348,6 +352,7 @@ export const EditorInterface: React.FC = () => {
       ref={rootRef}
       className={`editor-shell w-full h-full bg-bg text-fg overflow-hidden font-sans select-none relative z-20 flex flex-col ${compact ? "editor-compact" : ""}`}
     >
+      <React.Suspense fallback={<SplashScreen status="نفتح المحرر…" />}>
       <Toolbar />
 
       <div className="editor-body flex-1 min-h-0 flex">
@@ -531,6 +536,7 @@ export const EditorInterface: React.FC = () => {
 
       <SpotlightTour />
       <MoGraphTour />
+      </React.Suspense>
     </div>
   );
 };

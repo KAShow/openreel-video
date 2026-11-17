@@ -15,7 +15,7 @@ vi.mock("./hooks/useKieAIPoller", () => ({ useKieAIPoller: () => undefined }));
 vi.mock("./components/MobileBlocker", () => ({ MobileBlocker: () => null }));
 vi.mock("./components/Toast", () => ({ ToastContainer: () => null }));
 vi.mock("./components/editor/EditorInterface", () => ({ EditorInterface: () => <p>Editor</p> }));
-vi.mock("./components/welcome", () => ({ WelcomeScreen: () => <p>Welcome</p> }));
+vi.mock("./components/welcome/WelcomeScreen", () => ({ WelcomeScreen: () => <p>Welcome</p> }));
 vi.mock("./pages/SharePage", () => ({ SharePage: () => <p>Shared video</p> }));
 
 describe("new-project links", () => {

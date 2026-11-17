@@ -3,14 +3,18 @@
  * sound, edit and more, plus the captions sheet with its style tab. The work itself is in cuts.ts,
  * effect-tools.ts, audio-tools.ts and project-tools.ts.
  */
-import React, { useEffect, useRef, useState } from "react";
+import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Clapperboard, Mic, Music, Square } from "lucide-react";
 import { useProjectStore } from "../../stores/project-store";
 import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
-import { useChatStore } from "../../stores/chat-store";
 import { useRouter } from "../../hooks/use-router";
-import { AssistantGuide } from "../../components/editor/chat/AssistantGuide";
+// The assistant guide and the chat store bring the AI agent's whole tool registry with them, so
+// they load when the guide opens, not with the editor (plan phase 5).
+const AssistantGuide = lazy(() =>
+  import("../../components/editor/chat/AssistantGuide").then((m) => ({ default: m.AssistantGuide })),
+);
+const chatDraft = () => import("../../stores/chat-store").then((m) => m.useChatStore.getState().draft);
 import { HawshLibraryDialog } from "../HawshLibrary";
 import { useHawshStore } from "../session";
 import { SKIP_WELCOME } from "../simple";
@@ -363,7 +367,9 @@ export const MoreSheet: React.FC<{ onOpenAssistant: () => void }> = ({ onOpenAss
   if (view === "guide") {
     return (
       <div className="flex max-h-[55vh] flex-col">
-        <AssistantGuide onClose={() => { if (useChatStore.getState().draft !== draftBefore.current) onOpenAssistant(); else setView("menu"); }} />
+        <Suspense fallback={<p className="p-4 text-center text-sm text-fg-muted">جاري التحميل…</p>}>
+          <AssistantGuide onClose={() => { void chatDraft().then((draft) => { if (draft !== draftBefore.current) onOpenAssistant(); else setView("menu"); }); }} />
+        </Suspense>
       </div>
     );
   }
@@ -400,7 +406,7 @@ export const MoreSheet: React.FC<{ onOpenAssistant: () => void }> = ({ onOpenAss
         </div>
       </Row>
       <div className="space-y-2">
-        <button type="button" className={bigButton} onClick={() => { draftBefore.current = useChatStore.getState().draft; setView("guide"); }}>
+        <button type="button" className={bigButton} onClick={() => { setView("guide"); void chatDraft().then((draft) => { draftBefore.current = draft; }); }}>
           <span className="text-lg" aria-hidden>💡</span><span><b className="block">دليل المساعد</b><span className="text-xs text-fg-muted">وش تقدر تطلب منه، بأمثلة</span></span>
         </button>
         {!SKIP_WELCOME && (
