@@ -1,9 +1,11 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import { ArrowRight, LogIn, Plus } from "@/icons/lucide-compat";
-import { ToolcraftButton as Button } from "@openreel/ui";
-import { ToolcraftText as Text } from "@openreel/ui";
-import { useProjectStore } from "../../stores/project-store";
-import { SOCIAL_MEDIA_PRESETS } from "@openreel/core";
+// Hawsh: the files themselves; the @openreel/ui index brings framer-motion into the start page.
+import { ToolcraftButton as Button } from "@openreel/ui/components/toolcraft-button";
+import { ToolcraftText as Text } from "@openreel/ui/components/toolcraft-text";
+// Hawsh: the start page stays light; the project store and its engines load on first use.
+import { useProjectAction } from "../../hawsh/project-gateway";
+import { SOCIAL_MEDIA_PRESETS } from "@openreel/core/types/scriptable-template";
 import { useRouter } from "../../hooks/use-router";
 import { useEditorPreload } from "../../hooks/useEditorPreload";
 import { useAnalytics, AnalyticsEvents } from "../../hooks/useAnalytics";
@@ -97,7 +99,7 @@ interface WelcomeScreenProps {
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
-  const createNewProject = useProjectStore((state) => state.createNewProject);
+  const createNewProject = useProjectAction("createNewProject");
   const { navigate } = useRouter();
   const { track } = useAnalytics();
 
@@ -107,7 +109,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ initialTab }) => {
 
   const handleCreateProject = useCallback(() => {
     const preset = SOCIAL_MEDIA_PRESETS.tiktok;
-    createNewProject("مشروع جديد", {
+    void createNewProject("مشروع جديد", {
       width: preset.width,
       height: preset.height,
       frameRate: preset.frameRate,

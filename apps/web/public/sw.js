@@ -11,6 +11,10 @@
  */
 
 const CACHE_NAME = "openreel-v2";
+// Replaced at build time (vite-plugins/sw-build-manifest.ts) by an id of this build's files, so
+// every deploy changes this file: the browser installs the new worker and "activate" runs again.
+const BUILD_ID = "__HAWSH_BUILD_ID__";
+const ASSET_MANIFEST_URL = "/asset-manifest.json";
 const STATIC_CACHE_NAME = "openreel-static-v2";
 const DYNAMIC_CACHE_NAME = "openreel-dynamic-v2";
 
@@ -122,13 +126,43 @@ self.addEventListener("activate", (event) => {
             })
         );
       })
+      .then(() => pruneStaleAssets())
       .then(() => {
-        console.log("[ServiceWorker] Activated");
+        console.log("[ServiceWorker] Activated", BUILD_ID);
         // Take control of all clients immediately
         return self.clients.claim();
       })
   );
 });
+
+/**
+ * Hawsh: drop cached build files (`/assets/...`, hashed names) that the current build no longer
+ * has, so each deploy does not leave its old chunks on the phone. Fonts, icons and other files
+ * outside `/assets/` stay. If the manifest cannot be read (offline), nothing is deleted.
+ */
+async function pruneStaleAssets() {
+  try {
+    const response = await fetch(ASSET_MANIFEST_URL, { cache: "no-store" });
+    if (!response.ok) return;
+    const { files } = await response.json();
+    if (!Array.isArray(files) || files.length === 0) return;
+    const current = new Set(files.map((file) => "/" + file));
+    let removed = 0;
+    for (const name of [STATIC_CACHE_NAME, DYNAMIC_CACHE_NAME]) {
+      const cache = await caches.open(name);
+      for (const request of await cache.keys()) {
+        const url = new URL(request.url);
+        if (url.origin !== self.location.origin || !url.pathname.startsWith("/assets/")) continue;
+        if (current.has(url.pathname)) continue;
+        await cache.delete(request);
+        removed += 1;
+      }
+    }
+    if (removed) console.log("[ServiceWorker] Removed", removed, "files from earlier builds");
+  } catch (error) {
+    console.warn("[ServiceWorker] Could not prune old build files:", error);
+  }
+}
 
 /**
  * Fetch event - serve from cache or network

@@ -1,10 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
-import {
-  calculateProjectDuration,
-  type Project,
-  type ProjectSettings,
-  type Timeline,
-} from "@openreel/core";
+import type { Project, ProjectSettings, Timeline } from "@openreel/core";
+// Hawsh: the one function from its own file, so App can use DEFAULT_PROJECT_SETTINGS without the engines.
+import { calculateProjectDuration } from "@openreel/core/timeline/project-duration";
 import { generateProjectName } from "../../utils/project-names";
 
 // Hawsh: new projects start vertical 1080×1920 (owner's decision 2026-10-30).

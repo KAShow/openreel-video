@@ -12,4 +12,5 @@ export * from "./preview-resource-manager";
 export { CropModeView } from "./CropModeView";
 export { MotionPathOverlay } from "./MotionPathOverlay";
 export { MotionPathHandles } from "./MotionPathHandles";
-export { ParticleRenderer } from "./ParticleRenderer";
+// Hawsh: lazy, so three.js is not part of the editor's opening download.
+export { ParticleRenderer } from "../../../hawsh/LazyParticleRenderer";
