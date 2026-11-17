@@ -4,7 +4,7 @@
  * editable text clips on the Captions track via addSubtitle, so CaptionEditorPanel keeps working.
  */
 import React, { useCallback, useEffect, useState } from "react";
-import { SUBTITLE_STYLE_PRESETS, type TranscriptionSegment } from "@openreel/core";
+import type { TranscriptionSegment } from "@openreel/core";
 import {
   ToolcraftButton as Button,
   ToolcraftCard as Card,
@@ -16,15 +16,11 @@ import { useProjectStore } from "../stores/project-store";
 import { useUIStore } from "../stores/ui-store";
 import { HAWSH_EDITOR_PAGE } from "./config";
 import { useHawshStore } from "./session";
+import { CAPTION_PRESETS, defaultCaptionLook } from "./caption-look";
+import { applyCaptionLook } from "./caption-apply";
 import { loadTranscribePrice, transcribeClip, transcribePoints, TRANSCRIBE_DEFAULT_POINTS_PER_MIN } from "./transcribe";
 
-const STYLES = [
-  { value: "default", label: "افتراضي" },
-  { value: "modern", label: "عصري" },
-  { value: "bold", label: "عريض" },
-  { value: "cinematic", label: "سينمائي" },
-  { value: "minimal", label: "بسيط" },
-];
+const STYLES = CAPTION_PRESETS.map((p) => ({ value: p.id, label: p.label }));
 const LANGUAGES = [
   { value: "ar", label: "العربية" },
   { value: "en", label: "English" },
@@ -50,7 +46,7 @@ export const ServerCaptionPanel: React.FC<Props> = ({ clipId, maxWordsPerLine = 
   const canTranscribe = !!clip && !!media && (media.type === "video" || media.type === "audio");
 
   const [language, setLanguage] = useState("ar");
-  const [style, setStyle] = useState("default");
+  const [style, setStyle] = useState(CAPTION_PRESETS[0].id);
   const [price, setPrice] = useState(TRANSCRIBE_DEFAULT_POINTS_PER_MIN);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -78,14 +74,23 @@ export const ServerCaptionPanel: React.FC<Props> = ({ clipId, maxWordsPerLine = 
 
   const addToTimeline = useCallback(async () => {
     if (!clip || !segments.length) return;
-    const preset = SUBTITLE_STYLE_PRESETS[style] ?? SUBTITLE_STYLE_PRESETS.default;
-    for (const s of segments) {
-      await addSubtitle(
-        { id: `hawsh-${crypto.randomUUID()}`, text: s.text, startTime: s.startTime, endTime: s.endTime, style: preset },
-        { captionSource: "whisper", captionSourceClipId: clip.id, captionMaxWordsPerLine: maxWordsPerLine },
-      );
-    }
-    setStatus(`أُضيف ${segments.length} سطر ترجمة إلى مسار Captions.`);
+    const store = useProjectStore.getState();
+    const settings = store.project.settings;
+    const preset = CAPTION_PRESETS.find((p) => p.id === style) ?? CAPTION_PRESETS[0];
+    const look = preset.look(defaultCaptionLook(settings));
+    const before = new Set((store.project.textClips ?? []).map((t) => t.id));
+    store.beginHistoryGroup("Add captions");
+    try {
+      for (const s of segments) {
+        await addSubtitle(
+          { id: `hawsh-${crypto.randomUUID()}`, text: s.text, startTime: s.startTime, endTime: s.endTime, style: { fontFamily: look.fontFamily, fontSize: look.fontSize, color: look.color, backgroundColor: look.background, position: "bottom" } },
+          { captionSource: "whisper", captionSourceClipId: clip.id, captionMaxWordsPerLine: maxWordsPerLine },
+        );
+      }
+      const added = (useProjectStore.getState().project.textClips ?? []).filter((t) => !before.has(t.id)).map((t) => t.id);
+      await applyCaptionLook(added, look);
+    } finally { store.endHistoryGroup(); }
+    setStatus(`أُضيف ${segments.length} سطر ترجمة. تقدر تغيّر شكلها ومكانها من «شكل الترجمة».`);
     setSegments([]);
   }, [addSubtitle, clip, maxWordsPerLine, segments, style]);
 

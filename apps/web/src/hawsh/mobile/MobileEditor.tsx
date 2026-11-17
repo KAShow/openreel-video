@@ -20,13 +20,12 @@ import { useUIStore } from "../../stores/ui-store";
 import { useRouter } from "../../hooks/use-router";
 import { SKIP_WELCOME } from "../simple";
 import { Preview } from "../../components/editor/Preview";
-import { ServerCaptionPanel } from "../ServerCaptionPanel";
 import { TouchTimeline } from "./TouchTimeline";
 import { ClipTools } from "./ClipTools";
 import { selectedTarget } from "./clip-tools";
 import { TextComposer } from "./AddSheets";
-import { captionClipId } from "./add-tools";
 import { PhoneExport } from "./PhoneExport";
+import { AudioSheet, CaptionsSheet, EditSheet, EffectsSheet, MoreSheet, TransitionsSheet } from "./ToolSheets";
 
 const ChatPanel = React.lazy(() => import("../../components/editor/chat/ChatPanel").then((m) => ({ default: m.ChatPanel })));
 
@@ -154,20 +153,20 @@ export const MobileEditor: React.FC = () => {
               <span className="text-sm font-bold">{current.label}</span>
               <button type="button" aria-label="إغلاق" onClick={() => setSheet(null)} className="grid h-8 w-8 place-items-center rounded-full"><X size={20} /></button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              {sheet === "captions" && (
-                <ServerCaptionPanel clipId={captionClipId(project, playhead)} buttonLabel="فرّغ المقطع اللي تحت المؤشر" emptyHint="أضف فيديو فيه كلام أولاً." />
-              )}
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]" dir="rtl" data-no-translate="">
+              {sheet === "captions" && <CaptionsSheet />}
               {sheet === "text" && <TextComposer onDone={() => setSheet(null)} />}
+              {sheet === "transitions" && <TransitionsSheet />}
+              {sheet === "effects" && <EffectsSheet />}
+              {sheet === "audio" && <AudioSheet />}
+              {sheet === "edit" && <EditSheet onClose={() => setSheet(null)} />}
+              {sheet === "more" && <MoreSheet onOpenAssistant={() => setSheet("assistant")} />}
               {sheet === "assistant" && (
                 <div className="h-[55vh]">
                   <Suspense fallback={<div className="p-4 text-center text-xs text-fg-muted">…</div>}>
                     <ChatPanel onClose={() => setSheet(null)} />
                   </Suspense>
                 </div>
-              )}
-              {sheet !== "captions" && sheet !== "assistant" && sheet !== "text" && (
-                <p className="py-8 text-center text-sm text-fg-muted" dir="rtl" data-no-translate="">هذه الأداة تُضاف في المرحلة القادمة.</p>
               )}
             </div>
           </div>

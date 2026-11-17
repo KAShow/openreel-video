@@ -7,6 +7,7 @@ import { AutoReframeSection } from "../";
 // Hawsh Khalifa build: captions run on the site's server (src/hawsh/ServerCaptionPanel.tsx).
 import { ServerCaptionPanel as AutoCaptionPanel } from "../../../../hawsh/ServerCaptionPanel";
 import { CaptionEditorPanel } from "../CaptionEditorPanel";
+import { CaptionStyleEditor } from "../../../../hawsh/CaptionStyleEditor";
 import { AutoEditPanel } from "../../panels/AutoEditPanel";
 import { HighlightExtractorPanel } from "../../panels/HighlightExtractorPanel";
 import { InspectorSection } from "../shell/InspectorSection";
@@ -93,6 +94,12 @@ export const AiTab: React.FC<AiTabProps> = ({
             maxWordsPerLine={captionWordsPerLine}
             onMaxWordsPerLineChange={onCaptionWordsPerLineChange}
           />
+        </InspectorSection>
+      )}
+
+      {(clipType === "video" || clipType === "audio") && showAudioEffects && (
+        <InspectorSection title="شكل الترجمة" sectionId="caption-style" defaultOpen={false}>
+          <CaptionStyleEditor />
         </InspectorSection>
       )}
 
