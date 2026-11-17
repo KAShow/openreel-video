@@ -17,14 +17,14 @@ import {
   resolveCanvasFitDimensions,
   type Clip,
 } from "@openreel/core";
-import * as THREE from "three";
+import type * as THREE from "three";
 
 type GraphicClipUnion = ShapeClip | SVGClip | StickerClip;
 import { getEffectsBridge } from "../../../bridges/effects-bridge";
 import { getTransitionBridge } from "../../../bridges/transition-bridge";
 import type { ClipTransform } from "./types";
 import { DEFAULT_TRANSFORM } from "./types";
-import { ThreeJSLayerRenderer } from "./threejs-layer-renderer";
+import { ThreeJSLayerRenderer } from "../../../hawsh/lazy-three-layer"; // Hawsh: three.js loads on demand
 
 let lastEffectsLogTime = 0;
 let threeJSRenderer: ThreeJSLayerRenderer | null = null;

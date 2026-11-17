@@ -1,16 +1,17 @@
 import { useEffect, useCallback, useRef, useState, lazy, Suspense } from "react";
-import { ToastContainer } from "./components/Toast";
 import { MobileBlocker } from "./components/MobileBlocker";
 import { SplashScreen } from "./components/SplashScreen";
-import { WelcomeScreen } from "./components/welcome";
+// Hawsh: straight to the file, not the welcome index, which drags in three.js and the template engine.
+import { WelcomeScreen } from "./components/welcome/WelcomeScreen";
 import { useUIStore } from "./stores/ui-store";
-import { useProjectStore } from "./stores/project-store";
+import { useProjectAction, useProjectActionPending, useProjectValue } from "./hawsh/project-gateway";
+import { useNotificationStore } from "./stores/notification-store";
 import { useRouter } from "./hooks/use-router";
 import { useLastProject } from "./hooks/useLastProject";
-import { useKieAIPoller } from "./hooks/useKieAIPoller";
 import { SKIP_WELCOME } from "./hawsh/simple";
 import { DEFAULT_PROJECT_SETTINGS } from "./stores/project/project-helpers";
-import { SOCIAL_MEDIA_PRESETS, type SocialMediaCategory } from "@openreel/core";
+// Hawsh: the presets file alone; the @openreel/core index would load every engine before the start page.
+import { SOCIAL_MEDIA_PRESETS, type SocialMediaCategory } from "@openreel/core/types/scriptable-template";
 
 const EditorInterface = lazy(() =>
   import("./components/editor/EditorInterface").then((m) => ({
@@ -23,6 +24,9 @@ const ScriptViewDialog = lazy(() =>
 const SearchModal = lazy(() =>
   import("./components/editor/SearchModal").then((m) => ({ default: m.SearchModal })),
 );
+// Hawsh: these pull in the project store and framer-motion, so they load only when needed.
+const ToastContainer = lazy(() => import("./components/Toast").then((m) => ({ default: m.ToastContainer })));
+const KieAIPoller = lazy(() => import("./hawsh/KieAIPoller"));
 const SharePage = lazy(() =>
   import("./pages/SharePage").then((m) => ({ default: m.SharePage })),
 );
@@ -43,14 +47,19 @@ function App() {
   const [hasOpenedScriptView, setHasOpenedScriptView] = useState(false);
   const [isOpeningLast, setIsOpeningLast] = useState(false);
   const triedLastProject = useRef(false);
-  const createNewProject = useProjectStore((state) => state.createNewProject);
-  const recoverFromAutoSave = useProjectStore((state) => state.recoverFromAutoSave);
-  const hasOpenProject = useProjectStore((state) => state.hasOpenProject);
+  const createNewProject = useProjectAction("createNewProject");
+  const recoverFromAutoSave = useProjectAction("recoverFromAutoSave");
+  const hasOpenProject = useProjectValue((state) => state.hasOpenProject, false);
+  const projectActionPending = useProjectActionPending(); // e.g. "new project" while the store downloads
+  const hasToasts = useNotificationStore((state) => state.notifications.length > 0);
+  const [toastsShown, setToastsShown] = useState(false);
+  useEffect(() => {
+    if (hasToasts) setToastsShown(true);
+  }, [hasToasts]);
   const { isChecking, lastSaveId } = useLastProject();
 
   const { route, params, navigate, parsedDimensions, fps } = useRouter();
   const hasHandledInitialRoute = useRef(false);
-  useKieAIPoller();
   const showWelcome =
     !SKIP_WELCOME && ["welcome", "templates", "recent"].includes(route);
   const isSharePage = route === "share" && params.shareId;
@@ -100,7 +109,7 @@ function App() {
         }
       }
 
-      createNewProject(projectName, { width, height, frameRate });
+      void createNewProject(projectName, { width, height, frameRate });
       navigate("editor");
     } else if (route === "editor" && (skipWelcomeScreen || SKIP_WELCOME)) {
       hasHandledInitialRoute.current = true;
@@ -121,7 +130,7 @@ function App() {
   useEffect(() => {
     // A bare editor URL, such as a reload, continues the last project. It still needs
     // a real project for autosave and preview-proxy lifecycle subscriptions.
-    if (showWelcome || isSharePage || route === "new" || isChecking || isOpeningLast || hasOpenProject) return;
+    if (showWelcome || isSharePage || route === "new" || isChecking || isOpeningLast || hasOpenProject || projectActionPending) return;
     if (lastSaveId && !triedLastProject.current) {
       triedLastProject.current = true;
       setIsOpeningLast(true);
@@ -130,8 +139,8 @@ function App() {
         .finally(() => setIsOpeningLast(false));
       return;
     }
-    createNewProject("مشروع جديد");
-  }, [showWelcome, isSharePage, route, isChecking, isOpeningLast, hasOpenProject, lastSaveId, recoverFromAutoSave, createNewProject]);
+    void createNewProject("مشروع جديد");
+  }, [showWelcome, isSharePage, route, isChecking, isOpeningLast, hasOpenProject, projectActionPending, lastSaveId, recoverFromAutoSave, createNewProject]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -174,8 +183,9 @@ function App() {
           <EditorInterface />
         </Suspense>
       )}
-      <ToastContainer />
       <Suspense fallback={null}>
+        {(hasToasts || toastsShown) && <ToastContainer />}
+        {hasOpenProject && <KieAIPoller />}
         {(hasOpenedScriptView || activeModal === "scriptView") && <ScriptViewDialog isOpen={activeModal === "scriptView"} onClose={closeModal} />}
         {activeModal === "search" && <SearchModal isOpen onClose={closeModal} />}
       </Suspense>
