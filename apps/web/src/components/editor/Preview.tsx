@@ -72,8 +72,7 @@ import {
   MotionPathOverlay,
   ParticleRenderer,
   computePreviewResolution,
-  PREVIEW_MAX_DIMENSION,
-  previewQualityScale,
+  previewMaxDimension,
   applyPreviewAdjustmentLayers,
   clipNeedsFrameProcessing,
   clipCssFilterOnly,
@@ -92,6 +91,7 @@ import { snapCanvasPosition } from "./preview/canvas-snapping";
 import { captureNativeVideoFrame, seekVideoToFrame } from "./preview/video-frame";
 import { resolvePlaybackLoop, resolvePlaybackStart } from "../../utils/playback-loop";
 import { finishPreviewPlayback, markPreviewFrame, setPlaybackContext } from "../../hawsh/perf";
+import { closeSequentialFrames, sequentialFramesFor, type FrameSink } from "../../hawsh/sequential-frames";
 import { ProcessingOverlay } from "./ProcessingOverlay";
 import { editingFrameDurationMs } from "./editing-frame-rate";
 import {
@@ -567,28 +567,6 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
 
   const playbackQuality = useUIStore((state) => state.playbackQuality);
   const setPlaybackQuality = useUIStore((state) => state.setPlaybackQuality);
-  const previewRes = useMemo(
-    () =>
-      computePreviewResolution(
-        settings.width,
-        settings.height,
-        PREVIEW_MAX_DIMENSION *
-          previewQualityScale(playbackQuality, settings.width, settings.height),
-      ),
-    [settings.width, settings.height, playbackQuality],
-  );
-  useEffect(() => {
-    // Hawsh playback meter: what the summary line knows about this preview.
-    setPlaybackContext(() => {
-      const clips = useProjectStore.getState().project.timeline.tracks.flatMap((t) => t.clips);
-      return {
-        preview: `${previewRes.width}x${previewRes.height}`,
-        clips: clips.length,
-        clips_with_effects: clips.filter((c) => c.effects?.some((e) => e.enabled)).length,
-        speed_changes: clips.filter((c) => typeof c.speed === "number" && Math.abs(c.speed - 1) > 0.001).length,
-      };
-    });
-  }, [previewRes.width, previewRes.height]);
 
   const previewFrameSize = useMemo(() => {
     if (videoAreaSize.width <= 0 || videoAreaSize.height <= 0) {
@@ -621,6 +599,32 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
       height: height * zoomLevel,
     };
   }, [settings.height, settings.width, videoAreaSize, zoomLevel]);
+
+  // Hawsh build: "auto" draws at the size the preview is shown at (preview-resolution.ts).
+  const displayLongest = Math.max(previewFrameSize.width, previewFrameSize.height);
+  const previewMaxSide = previewMaxDimension(
+    playbackQuality,
+    settings.width,
+    settings.height,
+    displayLongest,
+    typeof window !== "undefined" ? window.devicePixelRatio : 1,
+  );
+  const previewRes = useMemo(
+    () => computePreviewResolution(settings.width, settings.height, previewMaxSide),
+    [settings.width, settings.height, previewMaxSide],
+  );
+  useEffect(() => {
+    // Hawsh playback meter: what the summary line knows about this preview.
+    setPlaybackContext(() => {
+      const clips = useProjectStore.getState().project.timeline.tracks.flatMap((t) => t.clips);
+      return {
+        preview: `${previewRes.width}x${previewRes.height}`,
+        clips: clips.length,
+        clips_with_effects: clips.filter((c) => c.effects?.some((e) => e.enabled)).length,
+        speed_changes: clips.filter((c) => typeof c.speed === "number" && Math.abs(c.speed - 1) > 0.001).length,
+      };
+    });
+  }, [previewRes.width, previewRes.height]);
 
   // Keep a ref to timelineTracks for use in playback effect without causing re-runs
   const timelineTracksRef = useRef(timelineTracks);
@@ -3715,13 +3719,8 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
                   ),
                 );
                 try {
-                  const result = await (
-                    resources.sink as {
-                      getCanvas: (time: number) => Promise<{
-                        canvas: HTMLCanvasElement | OffscreenCanvas;
-                      } | null>;
-                    }
-                  ).getCanvas(sourceTime);
+                  // Hawsh: decode in order during playback, not from the keyframe for every frame.
+                  const result = await sequentialFramesFor(resources.sink as FrameSink).frameAt(sourceTime);
                   if (!result?.canvas) return null;
                   return result.canvas;
                 } catch (error) {
@@ -3867,6 +3866,7 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
           const activeClipIds = new Set(activeClips.map((c) => c.clip.id));
           for (const [clipId, resources] of playbackResourcesRef.current) {
             if (!activeClipIds.has(clipId)) {
+              closeSequentialFrames(resources.sink);
               resources.input[Symbol.dispose]?.();
               playbackResourcesRef.current.delete(clipId);
             }
@@ -3983,15 +3983,8 @@ export const Preview: React.FC<{ hideControls?: boolean }> = ({ hideControls = f
                 );
 
                 try {
-                  const frameResult = await (
-                    resources.sink as {
-                      getCanvas: (time: number) => Promise<{
-                        canvas: HTMLCanvasElement | OffscreenCanvas;
-                        timestamp: number;
-                        duration: number;
-                      } | null>;
-                    }
-                  ).getCanvas(sourceTime);
+                  // Hawsh: decode in order during playback, not from the keyframe for every frame.
+                  const frameResult = await sequentialFramesFor(resources.sink as FrameSink).frameAt(sourceTime);
 
                   if (!isActive) return null;
 

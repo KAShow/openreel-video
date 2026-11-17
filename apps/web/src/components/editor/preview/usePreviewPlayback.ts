@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { closeSequentialFrames } from "../../../hawsh/sequential-frames";
 
 interface PlaybackMediaResource {
   input: { [Symbol.dispose]?: () => void };
@@ -42,6 +43,7 @@ export const usePreviewPlayback = ({
   const cleanupPlaybackResources = useCallback(() => {
     const resources = playbackResourcesRef.current;
     for (const [, resource] of resources) {
+      closeSequentialFrames(resource.sink);
       resource.input[Symbol.dispose]?.();
     }
     playbackResourcesRef.current = new Map();
