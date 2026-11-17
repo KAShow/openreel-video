@@ -18,7 +18,7 @@ import {
   X,
 } from "@/icons/lucide-compat";
 import { autoSaveManager, checkForRecovery } from "../../services/auto-save";
-import { useProjectStore } from "../../stores/project-store";
+import { useProjectAction } from "../../hawsh/project-gateway";
 import { useAnalytics, AnalyticsEvents } from "../../hooks/useAnalytics";
 import { forgetProjectThumbnail, projectThumbnail } from "../../hawsh/project-thumbs";
 
@@ -107,9 +107,7 @@ export function RecentProjects({
   const searchRef = useRef<HTMLInputElement>(null);
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
 
-  const recoverFromAutoSave = useProjectStore(
-    (state) => state.recoverFromAutoSave,
-  );
+  const recoverFromAutoSave = useProjectAction("recoverFromAutoSave");
   const { track } = useAnalytics();
 
   const loadProjects = useCallback(async () => {

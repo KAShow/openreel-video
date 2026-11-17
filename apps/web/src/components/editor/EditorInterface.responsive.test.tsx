@@ -47,8 +47,9 @@ describe("compact editing workspace", () => {
   });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); resize(originalWidth); });
 
-  it("keeps preview, media search, inspector and timeline state mounted across phone tabs and desktop resize", () => {
+  it("keeps preview, media search, inspector and timeline state mounted across phone tabs and desktop resize", async () => {
     const view = render(<EditorInterface />);
+    await view.findByLabelText("Clip title"); // the desktop panels load lazily (Hawsh, phase 5)
     const canvas = view.getByLabelText("Video preview");
     const media = view.getByLabelText("Media search") as HTMLInputElement;
     const title = view.getByLabelText("Clip title") as HTMLInputElement;
@@ -75,7 +76,7 @@ describe("compact editing workspace", () => {
 
   it("preserves AI drafts after switching panels and returns to timeline when AI closes", async () => {
     const view = render(<EditorInterface />);
-    fireEvent.click(view.getByRole("button", { name: "AI" }));
+    fireEvent.click(await view.findByRole("button", { name: "AI" }));
     const input = await view.findByLabelText("AI message") as HTMLInputElement;
     input.value = "Make this shorter";
     fireEvent.click(view.getByRole("button", { name: "Timeline" }));

@@ -1,4 +1,5 @@
-import { StorageEngine } from "@openreel/core";
+// Hawsh: its own file, so the saved-projects page can read media without the engines.
+import { StorageEngine } from "@openreel/core/storage/storage-engine";
 import type { MediaRecord, MediaMetadata } from "@openreel/core";
 
 const storage = new StorageEngine();

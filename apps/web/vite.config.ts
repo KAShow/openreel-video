@@ -3,8 +3,19 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import { stripFfmpegPlugin } from "./vite-plugins/strip-ffmpeg";
 import { pruneFontsPlugin } from "./vite-plugins/prune-fonts";
+import { swBuildManifestPlugin } from "./vite-plugins/sw-build-manifest";
+import { visualizer } from "rollup-plugin-visualizer";
 
 const isDesktop = process.env.OPENREEL_DESKTOP === "1";
+// Hawsh: `ANALYZE=1 pnpm build` writes dist-stats/bundle.html, a map of what each chunk contains.
+// Development only: the report sits outside dist, so it is never deployed.
+const analyzePlugins =
+  process.env.ANALYZE === "1"
+    ? [
+        visualizer({ filename: "dist-stats/bundle.html", template: "treemap", gzipSize: true }),
+        visualizer({ filename: "dist-stats/bundle.json", template: "raw-data", gzipSize: true }),
+      ]
+    : [];
 
 function desktopHtmlPlugin() {
   return {
@@ -30,7 +41,7 @@ function desktopHtmlPlugin() {
 
 export default defineConfig({
   base: isDesktop ? "./" : "/",
-  plugins: [react(), desktopHtmlPlugin(), stripFfmpegPlugin(isDesktop), pruneFontsPlugin(isDesktop)],
+  plugins: [react(), desktopHtmlPlugin(), stripFfmpegPlugin(isDesktop), pruneFontsPlugin(isDesktop), ...(isDesktop ? [] : [swBuildManifestPlugin()]), ...analyzePlugins],
   assetsInclude: ["**/*.wasm"],
   resolve: {
     dedupe: ["react", "react-dom"],
