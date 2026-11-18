@@ -120,9 +120,16 @@ export async function duplicate(t: Target): Promise<string | null> {
   return (await store().duplicateClip(t.id)).success ? null : FAILED;
 }
 
+/**
+ * Deletes the target. On video and image tracks later clips slide left into the gap (CapCut's main
+ * track): a plain delete left a hole where the clip was, so after cutting a part out and deleting it the
+ * project kept its old length, played black there, and a duplicate landed after the hole instead of
+ * next to the clip. Audio clips keep their place, like music placed on the beat.
+ */
 export async function remove(t: Target): Promise<string | null> {
   if (t.kind === "text-clip") return store().deleteTextClip(t.id) ? null : FAILED;
-  return (await store().removeClip(t.id)).success ? null : FAILED;
+  const ripple = t.trackType === "video" || t.trackType === "image";
+  return (await (ripple ? store().rippleDeleteClip(t.id) : store().removeClip(t.id))).success ? null : FAILED;
 }
 
 const SILENCE_ERRORS: Record<string, string> = {

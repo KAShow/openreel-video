@@ -11,6 +11,7 @@ const state = {
     return { success: true };
   }),
   removeClip: vi.fn(async (id: string) => { calls.push(`remove ${id}`); return { success: true }; }),
+  rippleDeleteClip: vi.fn(async (id: string) => { calls.push(`ripple ${id}`); return { success: true }; }),
   deleteTextClip: vi.fn((id: string) => { calls.push(`deleteText ${id}`); return true; }),
   splitOverlayClip: vi.fn(() => ({ left: {}, right: {} })),
   trimOverlayToPlayhead: vi.fn(() => ({})),
@@ -81,9 +82,12 @@ describe("cutting at the playhead", () => {
     expect(canCutAt(target(), edgeCutTime(0, 10, "start", 50)!)).toBe(true);
   });
 
-  it("deletes text clips through the text engine", async () => {
+  it("deletes text clips through the text engine and closes the gap on video tracks only", async () => {
+    const audio = { timeline: { tracks: [{ id: "a", type: "audio", clips: [{ ...clip, id: "a1", trackId: "a" }] }] } } as never;
     expect(await remove(selectedTarget(project, [{ type: "text-clip", id: "t1" }])!)).toBeNull();
     expect(await remove(target())).toBeNull();
-    expect(calls).toEqual(["deleteText t1", "remove c1"]);
+    expect(await remove(selectedTarget(project, [{ type: "clip", id: "img" }])!)).toBeNull();
+    expect(await remove(selectedTarget(audio, [{ type: "clip", id: "a1" }])!)).toBeNull();
+    expect(calls).toEqual(["deleteText t1", "ripple c1", "ripple img", "remove a1"]);
   });
 });

@@ -10,8 +10,6 @@ import { act, FAILED, grouped, mainClips, store } from "./live";
 export const FORMATS = [
   { id: "9:16", label: "طولي", hint: "ريلز، تيك توك، شورتس", width: 1080, height: 1920 },
   { id: "16:9", label: "عرضي", hint: "يوتيوب", width: 1920, height: 1080 },
-  { id: "1:1", label: "مربع", hint: "منشور", width: 1080, height: 1080 },
-  { id: "4:5", label: "عمودي قصير", hint: "منشور إنستغرام", width: 1080, height: 1350 },
 ] as const;
 
 /** The format matching the project's ratio, or null for a custom size. */
