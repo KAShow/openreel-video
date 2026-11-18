@@ -11,7 +11,7 @@
  */
 import React, { Suspense, useEffect, useRef, useState } from "react";
 import {
-  ArrowLeftRight, Bot, Captions, Ellipsis, Maximize, Music, Pause, Play, Redo2, Scissors, Sparkles, Type, Undo2, X,
+  ArrowLeftRight, Bot, Captions, Flag, Maximize, Music, Pause, Play, Redo2, Scissors, Sparkles, Type, Undo2, X,
   type LucideIcon,
 } from "lucide-react";
 import { useProjectStore } from "../../stores/project-store";
@@ -29,14 +29,16 @@ import { useWideEditor } from "./phone";
 import { useThemeStore } from "../../stores/theme-store";
 import { ThemeToggle } from "../AppearanceControls";
 import { PerfReadout } from "../PerfReadout";
+import { PreviewGestures } from "./PreviewGestures";
+import { currentFormat, FORMATS, setFormat } from "./project-tools";
 import { Sheet, SIDE_PANEL_WIDTH, useSidePanelOpen } from "./ui";
-import { AudioSheet, CaptionsSheet, EditSheet, EffectsSheet, MoreSheet, TransitionsSheet } from "./ToolSheets";
+import { AudioSheet, CaptionsSheet, EditSheet, EffectsSheet, ReportSheet, TransitionsSheet } from "./ToolSheets";
 
 const ChatPanel = React.lazy(() => import("../../components/editor/chat/ChatPanel").then((m) => ({ default: m.ChatPanel })));
 
-type SheetId = "edit" | "audio" | "text" | "captions" | "effects" | "transitions" | "assistant" | "more";
+type SheetId = "edit" | "audio" | "text" | "captions" | "effects" | "transitions" | "assistant" | "report";
 
-const TOOLS: { id: SheetId; label: string; icon: LucideIcon }[] = [
+const TOOLS: { id: Exclude<SheetId, "report">; label: string; icon: LucideIcon }[] = [
   { id: "edit", label: "تعديل", icon: Scissors },
   { id: "audio", label: "صوت", icon: Music },
   { id: "text", label: "نص", icon: Type },
@@ -44,7 +46,6 @@ const TOOLS: { id: SheetId; label: string; icon: LucideIcon }[] = [
   { id: "effects", label: "مؤثرات", icon: Sparkles },
   { id: "transitions", label: "انتقالات", icon: ArrowLeftRight },
   { id: "assistant", label: "مساعد", icon: Bot },
-  { id: "more", label: "المزيد", icon: Ellipsis },
 ];
 
 const fmt = (t: number) => {
@@ -63,7 +64,7 @@ export const MobileEditor: React.FC = () => {
   const clipSelected = selectedTarget(project, selectedItems) !== null;
   const [sheet, setSheet] = useState<SheetId | null>(null);
   const [exporting, setExporting] = useState(false);
-  const current = TOOLS.find((t) => t.id === sheet);
+  const current = sheet === "report" ? { id: "report" as const, label: "أبلغ عن مشكلة" } : TOOLS.find((t) => t.id === sheet);
   const [fullScreen, setFullScreen] = useState(false);
   const previewBox = useRef<HTMLElement>(null);
   const clearSelection = useUIStore((s) => s.clearSelection);
@@ -72,6 +73,13 @@ export const MobileEditor: React.FC = () => {
   const isDark = useThemeStore((s) => s.isDark);
   // Selecting a clip shows its own tools; the main sheet closes so the two never stack.
   useEffect(() => { if (clipSelected) setSheet(null); }, [clipSelected]);
+
+  const reportButton = (
+    <button type="button" aria-label="أبلغ عن مشكلة" title="أبلغ عن مشكلة" onClick={() => setSheet("report")}
+      className="grid h-10 w-10 place-items-center rounded-full active:bg-[var(--wash)]">
+      <Flag size={20} strokeWidth={1.7} />
+    </button>
+  );
 
   const enterFullScreen = () => {
     clearSelection();
@@ -93,10 +101,11 @@ export const MobileEditor: React.FC = () => {
     <div className={`hawsh-mobile ${isDark ? "dark" : "hawsh-light"} flex h-full w-full flex-col overflow-hidden bg-[var(--chrome)] text-fg`} data-testid="hawsh-mobile-editor">
 
       <header className="flex h-12 shrink-0 items-center gap-2 px-3" dir="rtl" data-no-translate="">
-        {SKIP_WELCOME ? <span className="h-10 w-10" aria-hidden /> : (
+        {SKIP_WELCOME ? reportButton : (
           <button type="button" aria-label="رجوع" onClick={() => navigate("welcome")} className="grid h-10 w-10 place-items-center rounded-full text-lg">→</button>
         )}
         <div className="min-w-0 flex-1 truncate text-center text-sm font-semibold" dir="auto">{projectName}</div>
+        {!SKIP_WELCOME && reportButton}
         <ThemeToggle className="active:bg-[var(--wash)]" />
         <button type="button" onClick={() => setExporting(true)} className="h-9 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground">تصدير</button>
       </header>
@@ -104,9 +113,9 @@ export const MobileEditor: React.FC = () => {
       <div className="flex min-h-0 flex-1 flex-col transition-[padding] duration-200" style={{ paddingRight: wide && sidePanel ? SIDE_PANEL_WIDTH : 0 }}>
       <section ref={previewBox} aria-label="المعاينة" data-testid="phone-preview"
         className={fullScreen ? "fixed inset-0 z-[95] bg-black" : `relative min-h-0 shrink-0 bg-[var(--stage)] ${wide ? "basis-[52%]" : "basis-[44%]"}`}>
-        <div className={`h-full w-full ${fullScreen ? "pointer-events-none pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)]" : ""}`}>
+        <PreviewGestures enabled={!fullScreen} className={`h-full w-full ${fullScreen ? "pointer-events-none pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)]" : ""}`}>
           <Preview hideControls />
-        </div>
+        </PreviewGestures>
         {fullScreen && (
           <>
             <button type="button" aria-label="إغلاق الشاشة الكاملة" onClick={leaveFullScreen}
@@ -124,11 +133,14 @@ export const MobileEditor: React.FC = () => {
         )}
       </section>
       <div className="flex h-11 shrink-0 items-center justify-between bg-[var(--chrome)] px-4 text-[var(--on-chrome)]" dir="ltr">
-        <span className="w-32 font-mono text-xs tabular-nums"><PlayTime /><span className="text-fg-muted"> / {fmt(duration)}</span></span>
+        <div className="flex w-36 items-center gap-2">
+          <span className="whitespace-nowrap font-mono text-[11px] tabular-nums"><PlayTime /><span className="text-fg-muted"> / {fmt(duration)}</span></span>
+          <FormatToggle />
+        </div>
         <button type="button" aria-label={playing ? "إيقاف" : "تشغيل"} onClick={togglePlayback} className="grid h-10 w-10 place-items-center rounded-full active:bg-[var(--wash)]">
           {playing ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
         </button>
-        <div className="flex w-32 items-center justify-end gap-1">
+        <div className="flex w-36 items-center justify-end gap-1">
           <UndoRedo />
           <button type="button" aria-label="شاشة كاملة" onClick={enterFullScreen} className="grid h-9 w-9 place-items-center rounded-full active:bg-[var(--wash)]">
             <Maximize size={20} />
@@ -141,7 +153,7 @@ export const MobileEditor: React.FC = () => {
       </section>
       </div>
 
-      {clipSelected ? <ClipTools /> : (
+      {clipSelected ? <ClipTools onAssistant={() => setSheet("assistant")} /> : (
       <nav className="flex h-16 shrink-0 justify-center bg-[var(--chrome)] pb-[env(safe-area-inset-bottom)]" dir="rtl" data-no-translate="" aria-label="أدوات المونتاج">
         <div className="flex w-full max-w-3xl items-stretch">
         {TOOLS.map((t) => (
@@ -173,7 +185,7 @@ export const MobileEditor: React.FC = () => {
           {sheet === "effects" && <EffectsSheet />}
           {sheet === "audio" && <AudioSheet />}
           {sheet === "edit" && <EditSheet onClose={() => setSheet(null)} />}
-          {sheet === "more" && <MoreSheet onOpenAssistant={() => setSheet("assistant")} />}
+          {sheet === "report" && <ReportSheet onClose={() => setSheet(null)} />}
         </Sheet>
       )}
       {exporting && <PhoneExport onClose={() => setExporting(false)} />}
@@ -189,6 +201,28 @@ export const MobileEditor: React.FC = () => {
 const PlayTime: React.FC = () => {
   const seconds = useTimelineStore((s) => Math.max(0, Math.floor(s.playheadPosition)));
   return <span>{fmt(seconds)}</span>;
+};
+
+/**
+ * The video format, one tap from the preview: shows the current one (9:16 or 16:9) and switches to the
+ * other (the editor offers just these two). It used to sit in "More", away from the picture it changes.
+ */
+const FormatToggle: React.FC = () => {
+  const settings = useProjectStore((s) => s.project.settings);
+  const [busy, setBusy] = useState(false);
+  const now = currentFormat(settings);
+  const next = FORMATS.find((f) => f.id !== now?.id) ?? FORMATS[0];
+  const portrait = settings.height >= settings.width;
+  return (
+    <button type="button" disabled={busy} data-testid="format-toggle"
+      aria-label={`المقاس الحالي ${now?.label ?? ""} ${now?.id ?? ""}. اضغط للتحويل إلى ${next.label} ${next.id}`}
+      title={`تحويل إلى ${next.label} ${next.id}`}
+      onClick={() => { setBusy(true); void setFormat(next.id).finally(() => setBusy(false)); }}
+      className="flex h-8 shrink-0 items-center gap-1 rounded-full border border-[var(--line)] px-2 text-[11px] font-semibold active:bg-[var(--wash)] disabled:opacity-40">
+      <span aria-hidden className={`block rounded-[2px] border-[1.5px] border-current ${portrait ? "h-3.5 w-2.5" : "h-2.5 w-3.5"}`} />
+      <span dir="ltr">{now?.id ?? `${settings.width}×${settings.height}`}</span>
+    </button>
+  );
 };
 
 /** Seek bar of the full-screen preview (same reason as PlayTime). */

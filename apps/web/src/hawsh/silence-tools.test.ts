@@ -4,9 +4,39 @@ import { useProjectStore } from "../stores/project-store";
 import { EditingSession } from "../services/agent/editing-session";
 import { editingToolDefs, editingToolReadOnly, executeEditingTool } from "../services/agent/editing-tools";
 import { TitleEngine } from "@openreel/core/text/title-engine";
-import { SILENCE_DEFAULTS, silenceRegions, timeAfterCuts } from "./silence-tools";
+import { autoThresholdDb, SILENCE_DEFAULTS, silenceRegions, timeAfterCuts } from "./silence-tools";
+import { AudioEngine } from "@openreel/core";
 
 const opts = SILENCE_DEFAULTS; // -40 dB, 0.5 s minimum, 0.1 s padding
+
+/** A phone recording: speech at 0.5 with room noise at `noise` in the pauses (2–3.5 s and 6–8 s of 10 s). */
+function noisyAudio(noise: number): AudioBuffer {
+  const rate = 8000;
+  const data = new Float32Array(rate * 10);
+  for (let i = 0; i < data.length; i++) data[i] = (i % 2 ? 1 : -1) * noise;
+  const speech = (from: number, to: number) => { for (let i = from * rate; i < to * rate; i++) data[i] = (i % 2 ? 1 : -1) * 0.5; };
+  speech(0, 2); speech(3.5, 6); speech(8, 10);
+  return { sampleRate: rate, duration: 10, numberOfChannels: 1, length: data.length, getChannelData: () => data } as unknown as AudioBuffer;
+}
+
+describe("autoThresholdDb", () => {
+  it("finds pauses in a recording whose room noise is louder than the fixed -40 dB", () => {
+    const noisy = noisyAudio(0.03); // about -30 dB: never "silent" at -40
+    expect(new AudioEngine().detectSilence(noisy, SILENCE_DEFAULTS.thresholdDb)).toEqual([]);
+    const threshold = autoThresholdDb(noisy);
+    expect(threshold).toBeGreaterThan(-30);
+    const found = new AudioEngine().detectSilence(noisy, threshold);
+    expect(found.map((r) => [Math.round(r.start), Math.round(r.end)])).toEqual([[2, 4], [6, 8]]);
+  });
+  it("keeps the default for clean audio and for audio with nothing to tell apart", () => {
+    expect(autoThresholdDb(noisyAudio(0))).toBe(SILENCE_DEFAULTS.thresholdDb);
+    const flat = { sampleRate: 8000, duration: 10, getChannelData: () => new Float32Array(80000).fill(0.3) } as unknown as AudioBuffer;
+    expect(autoThresholdDb(flat)).toBe(SILENCE_DEFAULTS.thresholdDb);
+  });
+  it("stays well under the speech level", () => {
+    expect(autoThresholdDb(noisyAudio(0.2))).toBeLessThanOrEqual(-20);
+  });
+});
 
 describe("silenceRegions", () => {
   const clip = { startTime: 10, duration: 8, inPoint: 2 }; // source 2..10 on timeline 10..18

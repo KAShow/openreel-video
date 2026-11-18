@@ -10,8 +10,37 @@
 import { getAudioEngine, type Project } from "@openreel/core";
 import type { EditingHost, ToolResult } from "@openreel/agent";
 
-export interface SilenceOptions { thresholdDb: number; minSilenceSec: number; paddingSec: number }
+/** `auto` reads the clip's own background noise to set the threshold (the phone editor); a number is fixed. */
+export interface SilenceOptions { thresholdDb: number; minSilenceSec: number; paddingSec: number; auto?: boolean }
 export const SILENCE_DEFAULTS: SilenceOptions = { thresholdDb: -40, minSilenceSec: 0.5, paddingSec: 0.1 };
+/** What the phone editor uses: a fixed -40 dB finds nothing in a phone recording, whose room noise is louder. */
+export const SILENCE_AUTO: SilenceOptions = { ...SILENCE_DEFAULTS, auto: true };
+
+/**
+ * The silence threshold (peak dB of a 100 ms window, the engine's own measure) for a recording with
+ * background noise. A fixed -40 dB never matched a phone video: room noise peaks around -35 to -25 dB,
+ * so no window ever counted as silent and the tool said "no silences found" every time. The quietest
+ * tenth of the windows is the noise floor; the threshold sits 6 dB above it, never stricter than the
+ * default and always well under the speech level. Audio without that contrast (music, a constant
+ * tone) keeps the default.
+ */
+export function autoThresholdDb(buffer: AudioBuffer, fallback = SILENCE_DEFAULTS.thresholdDb): number {
+  const data = buffer.getChannelData(0);
+  const window = Math.max(1, Math.floor(buffer.sampleRate * 0.1));
+  const levels: number[] = [];
+  for (let i = 0; i < data.length; i += window) {
+    const end = Math.min(i + window, data.length);
+    let peak = 0;
+    for (let j = i; j < end; j++) { const a = Math.abs(data[j]); if (a > peak) peak = a; }
+    levels.push(20 * Math.log10(Math.max(peak, 1e-6)));
+  }
+  if (levels.length < 10) return fallback;
+  levels.sort((a, b) => a - b);
+  const floor = levels[Math.floor(levels.length * 0.1)];
+  const speech = levels[Math.floor(levels.length * 0.9)];
+  if (speech - floor < 12) return fallback;
+  return Math.min(Math.max(fallback, floor + 6), speech - 10, -20);
+}
 /** split_clip needs a cut strictly inside a clip; never leave slivers shorter than this. */
 const EDGE = 0.05;
 
@@ -76,7 +105,7 @@ export async function analyseSilence(project: Project, clipId: string, opts: Sil
   if (!media?.blob) return { error: "The clip's media file is not available in this browser" };
   let buffer: AudioBuffer;
   try { buffer = await decode(media.blob); } catch { return { error: "This clip has no decodable audio" }; }
-  const source = getAudioEngine().detectSilence(buffer, opts.thresholdDb);
+  const source = getAudioEngine().detectSilence(buffer, opts.auto ? autoThresholdDb(buffer, opts.thresholdDb) : opts.thresholdDb);
   return { regions: silenceRegions(clip, source, opts), clipEnd: clip.startTime + clip.duration };
 }
 

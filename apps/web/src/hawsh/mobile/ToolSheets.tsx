@@ -1,19 +1,13 @@
 /**
  * Bodies of the phone tool sheets that used to say "coming in the next stage": transitions, effects,
- * sound, edit and more, plus the captions sheet with its style tab. The work itself is in cuts.ts,
+ * sound, edit and the problem report, plus the captions sheet with its style tab. The work itself is in cuts.ts,
  * effect-tools.ts, audio-tools.ts and project-tools.ts.
  */
-import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Clapperboard, Mic, Music, Square } from "lucide-react";
 import { useProjectStore } from "../../stores/project-store";
 import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
-// The assistant guide and the chat store bring the AI agent's whole tool registry with them, so
-// they load when the guide opens, not with the editor (plan phase 5).
-const AssistantGuide = lazy(() =>
-  import("../../components/editor/chat/AssistantGuide").then((m) => ({ default: m.AssistantGuide })),
-);
-const chatDraft = () => import("../../stores/chat-store").then((m) => m.useChatStore.getState().draft);
 import { HawshLibraryDialog } from "../HawshLibrary";
 import { useHawshStore } from "../session";
 import { logEvent } from "../logger";
@@ -30,7 +24,7 @@ import { ADJUSTMENTS, adjustmentValue, applyLook, applyLookEverywhere, clearEffe
 import {
   AUDIO_FADE, hasNoiseReduction, importAudio, isOriginalMuted, muteOriginal, placeAudio, recordingName, setAudioFade, setNoiseReduction,
 } from "./audio-tools";
-import { currentFormat, cutSilenceEverywhere, FORMATS, planSilenceEverywhere, setFormat, setReversed, type SilencePlan } from "./project-tools";
+import { cutSilenceEverywhere, planSilenceEverywhere, setReversed, type SilencePlan } from "./project-tools";
 import { bigButton, chip, chipOff, chipOn, Note, primaryButton, Row, Slider, useNote } from "./ui";
 
 /** The playhead at the moment of a tap (sheets do not re-render on every frame of playback). */
@@ -358,64 +352,32 @@ export const EditSheet: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   );
 };
 
-/* ------------------------------------------------------------------ more */
+/* ------------------------------------------------------------------ report */
 
-export const MoreSheet: React.FC<{ onOpenAssistant: () => void }> = ({ onOpenAssistant }) => {
+/** "Report a problem": the text and the project's state (never its files) go to the editor log. */
+export const ReportSheet: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const project = useProjectStore((s) => s.project);
-  const [view, setView] = useState<"menu" | "guide" | "report">("menu");
   const [report, setReport] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useNote();
-  const draftBefore = useRef("");
-  const format = currentFormat(project.settings);
+  const [sent, setSent] = useState(false);
 
-  if (view === "guide") {
-    return (
-      <div className="flex max-h-[55vh] flex-col">
-        <Suspense fallback={<p className="p-4 text-center text-sm text-fg-muted">جاري التحميل…</p>}>
-          <AssistantGuide onClose={() => { void chatDraft().then((draft) => { if (draft !== draftBefore.current) onOpenAssistant(); else setView("menu"); }); }} />
-        </Suspense>
-      </div>
-    );
-  }
-  if (view === "report") {
+  if (sent) {
     return (
       <div className="space-y-3">
-        <p className="text-xs text-fg-muted">اكتب وش صار، ووش كنت تحاول تسوي. نرسل معها حالة المشروع (بدون ملفاتك).</p>
-        <textarea value={report} onChange={(e) => setReport(e.target.value)} rows={4} dir="auto" placeholder="مثال: ضغطت تصدير وعلّق عند 50%"
-          className="w-full rounded-xl border border-border bg-bg-1 p-3 text-sm outline-none focus:border-primary" />
-        <button type="button" className={primaryButton} disabled={!report.trim()} onClick={() => {
-          const tracks = project.timeline.tracks.map((t) => ({ type: t.type, clips: t.clips.length }));
-          logEvent("error", { source: "user-report", message: report.trim().slice(0, 1000), device: "phone", duration: project.timeline.duration, width: project.settings.width, height: project.settings.height, tracks });
-          setReport(""); setView("menu"); setNote("وصلتنا ملاحظتك، شكراً لك.");
-        }}>أرسل</button>
-        <button type="button" className={`${chip} ${chipOff} w-full py-2.5`} onClick={() => setView("menu")}>رجوع</button>
+        <p className="py-4 text-center text-sm" role="status">وصلتنا ملاحظتك، شكراً لك.</p>
+        <button type="button" className={primaryButton} onClick={onClose}>تم</button>
       </div>
     );
   }
-
   return (
-    <div className="space-y-4">
-      <Row label="مقاس الفيديو">
-        <div className="grid grid-cols-2 gap-2">
-          {FORMATS.map((f) => (
-            <button key={f.id} type="button" disabled={busy} onClick={() => { setBusy(true); void setFormat(f.id).then((err) => setNote(err ?? `صار المقاس ${f.label} ${f.id}.`)).finally(() => setBusy(false)); }}
-              className={`rounded-xl border p-3 text-start ${format?.id === f.id ? chipOn : chipOff}`}>
-              <b className="block text-sm">{f.label} <span className="font-mono text-xs" dir="ltr">{f.id}</span></b>
-              <span className="text-[11px] opacity-80">{f.hint}</span>
-            </button>
-          ))}
-        </div>
-      </Row>
-      <div className="space-y-2">
-        <button type="button" className={bigButton} onClick={() => { setView("guide"); void chatDraft().then((draft) => { draftBefore.current = draft; }); }}>
-          <span className="text-lg" aria-hidden>💡</span><span><b className="block">دليل المساعد</b><span className="text-xs text-fg-muted">وش تقدر تطلب منه، بأمثلة</span></span>
-        </button>
-        <button type="button" className={bigButton} onClick={() => setView("report")}>
-          <span className="text-lg" aria-hidden>🛟</span><span><b className="block">أبلغ عن مشكلة</b><span className="text-xs text-fg-muted">تصلنا مباشرة لنصلحها</span></span>
-        </button>
-      </div>
-      <Note text={note} />
+    <div className="space-y-3">
+      <p className="text-xs text-fg-muted">اكتب وش صار، ووش كنت تحاول تسوي. نرسل معها حالة المشروع (بدون ملفاتك).</p>
+      <textarea value={report} onChange={(e) => setReport(e.target.value)} rows={4} dir="auto" placeholder="مثال: ضغطت تصدير وعلّق عند 50%"
+        className="w-full rounded-xl border border-border bg-bg-1 p-3 text-sm outline-none focus:border-primary" />
+      <button type="button" className={primaryButton} disabled={!report.trim()} onClick={() => {
+        const tracks = project.timeline.tracks.map((t) => ({ type: t.type, clips: t.clips.length }));
+        logEvent("error", { source: "user-report", message: report.trim().slice(0, 1000), device: "phone", duration: project.timeline.duration, width: project.settings.width, height: project.settings.height, tracks });
+        setReport(""); setSent(true);
+      }}>أرسل</button>
     </div>
   );
 };
