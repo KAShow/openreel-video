@@ -44,6 +44,8 @@ export class WebCodecsBackend implements EncoderBackend {
   private submittedVideoFrames = 0;
   private encodedVideoFrames = 0;
   private readonly pendingFrameReleases = new Set<() => void>();
+  private isWebKit = false;
+  private pixelContext: OffscreenCanvasRenderingContext2D | null = null;
 
   constructor(mediabunny: MediaBunnyModule, options?: WebCodecsBackendOptions) {
     this.mediabunny = mediabunny;
@@ -180,6 +182,7 @@ export class WebCodecsBackend implements EncoderBackend {
     // deadlock; finalization still requires a packet for every submitted frame.
     const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
     const isWebKit = /AppleWebKit\//.test(userAgent) && !/(?:Chrome|Chromium|Edg)\//.test(userAgent);
+    this.isWebKit = isWebKit;
     const videoSource = new VideoSampleSource({
       codec: videoCodec,
       bitrate: targetVideoBitrate,
@@ -224,11 +227,7 @@ export class WebCodecsBackend implements EncoderBackend {
     if (!this.videoSource) {
       throw new Error("Encoder backend not started");
     }
-    const { VideoSample } = this.mediabunny;
-    const videoSample = new VideoSample(frame, {
-      timestamp: timestampSec,
-      duration: durationSec,
-    });
+    const videoSample = this.toVideoSample(frame, timestampSec, durationSec);
     let released = false;
     const release = () => {
       if (released) return;
@@ -264,11 +263,33 @@ export class WebCodecsBackend implements EncoderBackend {
     await this.writableStream?.close();
   }
 
+  /**
+   * Safari (iPhone) stops the export on the first frame ("Buffer has no frame"): its hardware H.264
+   * encoder finds no pixel buffer in a VideoFrame wrapped around an ImageBitmap. On WebKit the encoder
+   * gets the pixels themselves; other browsers keep the faster bitmap path.
+   */
+  private toVideoSample(frame: ImageBitmap, timestamp: number, duration: number) {
+    const { VideoSample } = this.mediabunny;
+    if (!this.isWebKit || typeof OffscreenCanvas === "undefined") return new VideoSample(frame, { timestamp, duration });
+    const { width, height } = frame;
+    let ctx = this.pixelContext;
+    if (!ctx || ctx.canvas.width !== width || ctx.canvas.height !== height) {
+      ctx = new OffscreenCanvas(width, height).getContext("2d", { willReadFrequently: true });
+      if (!ctx) return new VideoSample(frame, { timestamp, duration });
+      this.pixelContext = ctx;
+    }
+    ctx.drawImage(frame, 0, 0);
+    return new VideoSample(ctx.getImageData(0, 0, width, height).data, {
+      format: "RGBX", codedWidth: width, codedHeight: height, timestamp, duration,
+      colorSpace: { matrix: "rgb", primaries: "bt709", transfer: "iec61966-2-1", fullRange: true },
+    });
+  }
+
   async abort(): Promise<void> {
     for (const release of this.pendingFrameReleases) release();
+    // cancel() already force-closes the tracks. Closing them again started a second, unawaited flush
+    // on the failed encoder, which surfaced as an uncaught "VideoEncoder is not configured".
     try { await this.output?.cancel(); } catch {}
-    this.videoSource?.close();
-    this.audioSource?.close();
     try {
       await this.writableStream?.abort();
     } catch {}

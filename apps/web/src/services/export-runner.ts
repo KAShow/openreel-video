@@ -8,6 +8,7 @@ import {
   type Project,
 } from "@openreel/core";
 import { rememberExport } from "../hawsh/lastExport";
+import { logError } from "../hawsh/logger";
 
 export interface ExportRunnerState {
   isExporting: boolean;
@@ -499,6 +500,8 @@ export function useExportRunner(options: ExportRunnerOptions): UseExportRunner {
       setState(INITIAL_STATE);
       return;
     }
+    // A failed export was only shown on screen; record it with its stack so it can be traced later.
+    logError("export", error, { ua: typeof navigator === "undefined" ? "" : navigator.userAgent.slice(0, 160) });
     setState((prev) => ({
       ...prev,
       isExporting: false,
