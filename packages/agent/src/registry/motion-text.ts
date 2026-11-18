@@ -219,7 +219,7 @@ export const motionTextTools: RegisteredTool[] = [
       decay: num,
     }, ["compositionId", "layerId", "property", "expressionType"]),
     readOnly: false,
-    destructive: false,
+    destructive: true,
     expensive: false,
     handler: async (args, host) => {
       host.requireOpenProject();
@@ -325,7 +325,7 @@ export const motionTextTools: RegisteredTool[] = [
       ["compositionId", "layerId", "expressionId"],
     ),
     readOnly: false,
-    destructive: false,
+    destructive: true,
     expensive: false,
     handler: async (args, host) => {
       host.requireOpenProject();

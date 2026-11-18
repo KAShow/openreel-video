@@ -15,6 +15,7 @@ import type {
 import { normalizeMotionCamera } from "../motion/motion-camera";
 import { normalizeMotionLights } from "../motion/motion-lights";
 import { normalizeMotionTracks } from "../motion/motion-tracking";
+import { SAFE_EXPRESSION_MAX_CODE_LENGTH } from "../motion/safe-expression-evaluator";
 import { normalizeCreationState } from "../creation";
 import {
   UNIVERSAL_TRACKS_MIN_READER_VERSION,
@@ -138,16 +139,43 @@ function normalizeMotionAudioClips(
   );
 }
 
+/**
+ * Defense in depth for imported projects: custom expression `code` must be a
+ * string within the evaluator's size cap. Anything else is dropped (the
+ * expression stays but evaluates to its base value) so oversized or malformed
+ * payloads never reach the evaluator.
+ */
+function sanitizeImportedLayerExpressions(layer: MotionLayer): MotionLayer {
+  if (!Array.isArray(layer.expressions) || layer.expressions.length === 0) {
+    return layer;
+  }
+  return {
+    ...layer,
+    expressions: layer.expressions.map((expression) => {
+      if (
+        typeof expression.code !== "string" ||
+        expression.code.length > SAFE_EXPRESSION_MAX_CODE_LENGTH
+      ) {
+        const { code: _dropped, ...rest } = expression;
+        return rest as typeof expression;
+      }
+      return expression;
+    }),
+  };
+}
+
 function normalizeMotionLayers(
   composition: Pick<MotionComposition, "layers">,
 ): MotionLayer[] {
   if (!Array.isArray(composition.layers)) {
     return [];
   }
-  return composition.layers.filter(
-    (layer): layer is MotionLayer =>
-      !!layer && typeof layer === "object" && typeof layer.id === "string",
-  );
+  return composition.layers
+    .filter(
+      (layer): layer is MotionLayer =>
+        !!layer && typeof layer === "object" && typeof layer.id === "string",
+    )
+    .map(sanitizeImportedLayerExpressions);
 }
 
 export function normalizeMotionComposition(

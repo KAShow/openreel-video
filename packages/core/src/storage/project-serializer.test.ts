@@ -217,6 +217,93 @@ describe("normalizeMotionComposition", () => {
     expect(once.tracks).toEqual([]);
     expect(twice).toEqual(once);
   });
+
+  it("keeps a legitimate custom expression code on import", () => {
+    const normalized = normalizeMotionComposition(
+      makeComposition({
+        layers: [
+          makeVideoLayer({
+            expressions: [
+              {
+                id: "expr-1",
+                property: "transform.position.x",
+                type: "expression",
+                name: "Expression",
+                enabled: true,
+                amplitude: 0,
+                frequency: 1,
+                phase: 0,
+                seed: 1,
+                decay: 3,
+                code: "value + wiggle(2, 20)",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect(normalized.layers[0]?.expressions?.[0]?.code).toBe(
+      "value + wiggle(2, 20)",
+    );
+  });
+
+  it("drops oversized expression code on import", () => {
+    const normalized = normalizeMotionComposition(
+      makeComposition({
+        layers: [
+          makeVideoLayer({
+            expressions: [
+              {
+                id: "expr-1",
+                property: "transform.position.x",
+                type: "expression",
+                name: "Expression",
+                enabled: true,
+                amplitude: 0,
+                frequency: 1,
+                phase: 0,
+                seed: 1,
+                decay: 3,
+                code: "1 + ".repeat(4000) + "1",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect(normalized.layers[0]?.expressions?.[0]?.code).toBeUndefined();
+    expect(normalized.layers[0]?.expressions?.[0]?.type).toBe("expression");
+  });
+
+  it("drops non-string expression code on import", () => {
+    const normalized = normalizeMotionComposition(
+      makeComposition({
+        layers: [
+          makeVideoLayer({
+            expressions: [
+              {
+                id: "expr-1",
+                property: "transform.position.x",
+                type: "expression",
+                name: "Expression",
+                enabled: true,
+                amplitude: 0,
+                frequency: 1,
+                phase: 0,
+                seed: 1,
+                decay: 3,
+                code: 12345,
+              } as never,
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect(normalized.layers[0]?.expressions?.[0]?.code).toBeUndefined();
+  });
 });
 
 describe("normalizeProjectMotionFields", () => {

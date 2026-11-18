@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { HeadlessHost } from "./headless-host";
-import { executeTool } from "./executor";
+import { executeTool, isDestructive } from "./executor";
 import { makeEmptyProject } from "./test-fixtures";
 import { DEFAULT_MOTION_TRANSFORM } from "@openreel/core/motion/types";
 import type {
@@ -664,5 +664,12 @@ describe("list_motion_expression_errors", () => {
     );
     expect(res.ok).toBe(false);
     expect(res.error?.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("custom code expression tools require confirmation", () => {
+  it("marks attach_motion_expression and update_motion_expression destructive", () => {
+    expect(isDestructive("attach_motion_expression")).toBe(true);
+    expect(isDestructive("update_motion_expression")).toBe(true);
   });
 });
