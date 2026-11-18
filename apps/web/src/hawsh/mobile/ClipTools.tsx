@@ -5,7 +5,7 @@
  */
 import React, { useEffect, useState } from "react";
 import {
-  AudioWaveform, Copy, Gauge, Palette, Pencil, Scissors, Sparkles, SquareSplitHorizontal, Trash2, Volume2, X, type LucideIcon,
+  AudioWaveform, Bot, Copy, Gauge, Palette, Pencil, Scissors, Sparkles, SquareSplitHorizontal, Trash2, Volume2, X, type LucideIcon,
 } from "lucide-react";
 import { CaptionStyleEditor } from "../CaptionStyleEditor";
 import { EffectsSheet } from "./ToolSheets";
@@ -51,7 +51,11 @@ export function toolsFor(t: Target): string[] {
 
 const btn = "rounded-xl border border-border bg-bg-1 px-3 py-3 text-sm font-semibold active:bg-bg-2 disabled:opacity-40";
 
-export const ClipTools: React.FC = () => {
+/**
+ * `onAssistant` opens the assistant sheet: while a clip is selected this bar replaces the main one, and
+ * the assistant used to be reachable only from the main bar, so it could not be used with a clip chosen.
+ */
+export const ClipTools: React.FC<{ onAssistant?: () => void }> = ({ onAssistant }) => {
   const project = useProjectStore((s) => s.project);
   const selected = useUIStore((s) => s.selectedItems);
   const clearSelection = useUIStore((s) => s.clearSelection);
@@ -99,6 +103,13 @@ export const ClipTools: React.FC = () => {
         dir="rtl" data-no-translate="" aria-label="أدوات اللقطة" data-testid="clip-tools">
         <div className="flex w-full max-w-3xl items-stretch overflow-x-auto [scrollbar-width:none]">
         <button type="button" aria-label="إلغاء التحديد" onClick={() => clearSelection()} className="flex w-11 shrink-0 items-center justify-center border-e border-[var(--line)]"><X size={22} strokeWidth={1.6} /></button>
+        {onAssistant && (
+          <button type="button" onClick={onAssistant} data-testid="clip-assistant"
+            className="flex min-w-[52px] flex-1 flex-col items-center justify-center gap-1 px-0.5 text-center text-[11px] leading-tight text-fg">
+            <Bot size={22} strokeWidth={1.6} aria-hidden />
+            مساعد
+          </button>
+        )}
         {TOOLS.filter((t) => allowed.includes(t.id)).map((t) => (
           <button key={t.id} type="button" disabled={busy} onClick={() => onTool(t)}
             className={`flex min-w-[52px] flex-1 flex-col items-center justify-center gap-1 px-0.5 text-center text-[11px] leading-tight disabled:opacity-40 ${t.id === "delete" ? "text-red-400" : "text-fg"}`}>

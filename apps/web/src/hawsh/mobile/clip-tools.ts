@@ -7,7 +7,7 @@
 import { getSpeedEngine, type Clip, type Project } from "@openreel/core";
 import type { EditingHost } from "@openreel/agent";
 import { useProjectStore } from "../../stores/project-store";
-import { analyseSilence, applySilenceCuts, SILENCE_DEFAULTS, type Region } from "../silence-tools";
+import { analyseSilence, applySilenceCuts, SILENCE_AUTO, type Region } from "../silence-tools";
 
 /** A cut closer than this to a clip edge would leave a sliver; the tools refuse it. */
 export const EDGE = 0.05;
@@ -141,9 +141,9 @@ const SILENCE_ERRORS: Record<string, string> = {
 
 export const silenceTotal = (regions: readonly Region[]) => Math.round(regions.reduce((s, r) => s + (r.end - r.start), 0) * 10) / 10;
 
-/** Silent pauses in the clip (timeline ranges), with the editor's default settings. */
+/** Silent pauses in the clip (timeline ranges); the threshold follows the clip's own background noise. */
 export async function findSilences(clipId: string): Promise<{ regions: Region[] } | { error: string }> {
-  const res = await analyseSilence(store().project, clipId, SILENCE_DEFAULTS);
+  const res = await analyseSilence(store().project, clipId, SILENCE_AUTO);
   if ("error" in res) return { error: SILENCE_ERRORS[res.error] ?? FAILED };
   return { regions: res.regions };
 }
