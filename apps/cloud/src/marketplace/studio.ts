@@ -16,7 +16,7 @@ import {
 } from "@openreel/fxpkg";
 import type { Bindings } from "./types";
 import { getStore } from "./store";
-import { requireCreator, isResponse } from "./auth";
+import { requireCreator, isResponse, requireApiToken, getIdentity } from "./auth";
 import { runAutoChecks, buildArtifact } from "./autochecks";
 import { rateLimit, DAY, SECOND } from "./ratelimit";
 
@@ -26,6 +26,8 @@ const slugify = (s: string) => s.toLowerCase().replace(/[^\w]+/g, "-").replace(/
 
 // ── Drafts (§34.2) ─────────────────────────────────────────────────────────
 app.post("/drafts", rateLimit({ key: "authoring", limit: 100, windowMs: SECOND }), async (c) => {
+  const denied = requireApiToken(c, "STUDIO_API_TOKEN");
+  if (denied) return denied;
   const id = requireCreator(c);
   if (isResponse(id)) return id;
   const body = await c.req.json<{ kind: AssetKind; title?: string; graph?: unknown; manifest_draft?: unknown }>();
@@ -45,12 +47,16 @@ app.post("/drafts", rateLimit({ key: "authoring", limit: 100, windowMs: SECOND }
 });
 
 app.get("/drafts", async (c) => {
+  const denied = requireApiToken(c, "STUDIO_API_TOKEN");
+  if (denied) return denied;
   const id = requireCreator(c);
   if (isResponse(id)) return id;
   return c.json({ drafts: await getStore(c.env).listDraftsByCreator(id.creatorId) });
 });
 
 app.get("/drafts/:id", async (c) => {
+  const denied = requireApiToken(c, "STUDIO_API_TOKEN");
+  if (denied) return denied;
   const id = requireCreator(c);
   if (isResponse(id)) return id;
   const draft = await getStore(c.env).getDraft(c.req.param("id"));
@@ -59,6 +65,8 @@ app.get("/drafts/:id", async (c) => {
 });
 
 app.put("/drafts/:id", rateLimit({ key: "authoring", limit: 100, windowMs: SECOND }), async (c) => {
+  const denied = requireApiToken(c, "STUDIO_API_TOKEN");
+  if (denied) return denied;
   const id = requireCreator(c);
   if (isResponse(id)) return id;
   const store = getStore(c.env);
@@ -78,6 +86,8 @@ app.put("/drafts/:id", rateLimit({ key: "authoring", limit: 100, windowMs: SECON
 
 // Client-side pre-flight (§37.2): compile + report without submitting.
 app.post("/drafts/:id/validate", async (c) => {
+  const denied = requireApiToken(c, "STUDIO_API_TOKEN");
+  if (denied) return denied;
   const id = requireCreator(c);
   if (isResponse(id)) return id;
   const draft = await getStore(c.env).getDraft(c.req.param("id"));
@@ -94,6 +104,8 @@ app.post("/drafts/:id/validate", async (c) => {
 
 // Submit for review (§37.1, §38).
 app.post("/drafts/:id/submit", rateLimit({ key: "submission", limit: 10, windowMs: DAY }), async (c) => {
+  const denied = requireApiToken(c, "STUDIO_API_TOKEN");
+  if (denied) return denied;
   const id = requireCreator(c);
   if (isResponse(id)) return id;
   const store = getStore(c.env);
@@ -183,6 +195,8 @@ app.post("/drafts/:id/submit", rateLimit({ key: "submission", limit: 10, windowM
 
 // ── Creator's published assets (§34.2) ──────────────────────────────────────
 app.get("/me/assets", async (c) => {
+  const denied = requireApiToken(c, "STUDIO_API_TOKEN");
+  if (denied) return denied;
   const id = requireCreator(c);
   if (isResponse(id)) return id;
   const { items } = await getStore(c.env).listAssets({ creatorId: id.creatorId });
@@ -190,6 +204,8 @@ app.get("/me/assets", async (c) => {
 });
 
 app.post("/me/assets/:id/rollback", async (c) => {
+  const denied = requireApiToken(c, "STUDIO_API_TOKEN");
+  if (denied) return denied;
   const id = requireCreator(c);
   if (isResponse(id)) return id;
   const store = getStore(c.env);
@@ -206,16 +222,19 @@ app.post("/me/assets/:id/rollback", async (c) => {
 });
 
 // ── Review tooling (§39) ────────────────────────────────────────────────────
+// The admin token is the authorization here; identity headers are optional
+// attribution for the reviewer record.
 app.get("/submissions", async (c) => {
-  const id = requireCreator(c);
-  if (isResponse(id)) return id;
+  const denied = requireApiToken(c, "REVIEW_ADMIN_TOKEN");
+  if (denied) return denied;
   const state = c.req.query("state");
   return c.json({ submissions: await getStore(c.env).listSubmissions(state) });
 });
 
 app.post("/submissions/:id/review", async (c) => {
-  const id = requireCreator(c);
-  if (isResponse(id)) return id;
+  const denied = requireApiToken(c, "REVIEW_ADMIN_TOKEN");
+  if (denied) return denied;
+  const reviewer = getIdentity(c)?.userId ?? "review-admin";
   const store = getStore(c.env);
   const submission = await store.getSubmission(c.req.param("id"));
   if (!submission) return c.json({ error: "not_found" }, 404);
@@ -226,7 +245,7 @@ app.post("/submissions/:id/review", async (c) => {
   }
   submission.state = target;
   submission.reviewerNotes = body.notes;
-  submission.reviewerId = id.creatorId;
+  submission.reviewerId = reviewer;
   submission.updatedAt = now();
   await store.putSubmission(submission);
 

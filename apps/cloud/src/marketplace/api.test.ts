@@ -3,9 +3,15 @@ import app from "../index";
 import { sealEvent, getBlueprint } from "@openreel/fxpkg";
 
 // In-memory store is module-global; reset between suites by using fresh ids.
-const env = { ENVIRONMENT: "test", EVENT_HMAC_SECRET: "test-secret" } as unknown as Record<string, unknown>;
-const creatorHeaders = { "Content-Type": "application/json", "X-User-Id": "u-creator", "X-Creator-Id": "c-1", "X-Creator-Handle": "augani" };
-const userHeaders = { "Content-Type": "application/json", "X-User-Id": "u-viewer" };
+const env = {
+  ENVIRONMENT: "test",
+  EVENT_HMAC_SECRET: "test-secret",
+  STUDIO_API_TOKEN: "studio-test-token",
+  REVIEW_ADMIN_TOKEN: "review-test-token",
+} as unknown as Record<string, unknown>;
+const creatorHeaders = { "Content-Type": "application/json", "X-User-Id": "u-creator", "X-Creator-Id": "c-1", "X-Creator-Handle": "augani", Authorization: "Bearer studio-test-token" };
+const userHeaders = { "Content-Type": "application/json", "X-User-Id": "u-viewer", Authorization: "Bearer studio-test-token" };
+const adminHeaders = { "Content-Type": "application/json", Authorization: "Bearer review-test-token" };
 
 async function req(path: string, init?: RequestInit) {
   return app.request(path, init, env as never);
@@ -82,7 +88,7 @@ describe("marketplace + studio API", () => {
   });
 
   it("reviewer approves → published; asset appears in discovery", async () => {
-    const review = await req(`/v1/submissions/${submissionId}/review`, { method: "POST", headers: creatorHeaders, body: JSON.stringify({ decision: "approve" }) });
+    const review = await req(`/v1/submissions/${submissionId}/review`, { method: "POST", headers: adminHeaders, body: JSON.stringify({ decision: "approve" }) });
     expect(review.status).toBe(200);
     const j = (await review.json()) as { submission: { state: string } };
     expect(j.submission.state).toBe("published");

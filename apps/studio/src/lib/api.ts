@@ -1,16 +1,21 @@
 /**
  * Studio API client (STUDIO_PLAN §34.2). Talks to the marketplace/studio Worker.
- * Dev identity is sent via headers (matches the API auth shim); production swaps
- * to cookie/JWT. Base URL is configurable via VITE_API_URL.
+ * Mutating + identity-scoped routes require the server-issued API token
+ * (VITE_STUDIO_API_TOKEN, must match the Worker's STUDIO_API_TOKEN secret);
+ * identity headers are only an internal hint behind that gate. Base URL is
+ * configurable via VITE_API_URL.
  */
 import type { AssetKind, Graph } from "@openreel/fxpkg";
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8787";
 
+const API_TOKEN = (import.meta.env.VITE_STUDIO_API_TOKEN as string | undefined) ?? "";
+
 const IDENTITY = {
   "X-User-Id": "u-studio",
   "X-Creator-Id": "c-studio",
   "X-Creator-Handle": "augani",
+  ...(API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {}),
 };
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {

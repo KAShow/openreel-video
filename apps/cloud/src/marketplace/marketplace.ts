@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { listBlueprints, paletteNodes, type AbiVersion, type AssetKind } from "@openreel/fxpkg";
 import type { Bindings } from "./types";
 import { getStore } from "./store";
-import { requireUser, isResponse } from "./auth";
+import { requireUser, isResponse, requireApiToken } from "./auth";
 import { rateLimit, DAY } from "./ratelimit";
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -76,6 +76,8 @@ app.get("/assets/:id/versions/:n/fxpkg", async (c) => {
 });
 
 app.post("/assets/:id/install", rateLimit({ key: "install", limit: 1000, windowMs: DAY }), async (c) => {
+  const denied = requireApiToken(c, "STUDIO_API_TOKEN");
+  if (denied) return denied;
   const id = requireUser(c);
   if (isResponse(id)) return id;
   const store = getStore(c.env);
@@ -86,6 +88,8 @@ app.post("/assets/:id/install", rateLimit({ key: "install", limit: 1000, windowM
 });
 
 app.get("/me/library", async (c) => {
+  const denied = requireApiToken(c, "STUDIO_API_TOKEN");
+  if (denied) return denied;
   const id = requireUser(c);
   if (isResponse(id)) return id;
   return c.json({ asset_ids: await getStore(c.env).listInstalls(id.userId) });

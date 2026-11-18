@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Bindings } from './marketplace/types';
+import { getIdentity, requireApiToken, tokenMatches } from './marketplace/auth';
 import marketplace from './marketplace/marketplace';
 import studio from './marketplace/studio';
 import events from './marketplace/events';
@@ -122,14 +123,25 @@ app.get('/templates/:id', async (c) => {
   }
 });
 
+// Template ids become R2 object keys: restrict to URL-safe slugs.
+const TEMPLATE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
 app.post('/templates', async (c) => {
+  const denied = requireApiToken(c, 'STUDIO_API_TOKEN');
+  if (denied) return denied;
+
   const bucket = c.env.TEMPLATES_BUCKET;
 
   try {
     const body = await c.req.json();
 
-    if (!body.id || !body.name || !body.timeline) {
-      return c.json({ error: 'Invalid template format. Required: id, name, timeline' }, 400);
+    if (
+      !body.id || !body.name || !body.timeline ||
+      typeof body.id !== 'string' || typeof body.name !== 'string' ||
+      typeof body.timeline !== 'object' ||
+      !TEMPLATE_ID_PATTERN.test(body.id)
+    ) {
+      return c.json({ error: 'Invalid template format. Required: id (lowercase slug), name, timeline' }, 400);
     }
 
     const templateId = body.id;
@@ -147,6 +159,8 @@ app.post('/templates', async (c) => {
       version: body.version || '1.0.0',
     };
 
+    const identity = getIdentity(c);
+
     await bucket.put(key, JSON.stringify(template, null, 2), {
       httpMetadata: {
         contentType: 'application/json',
@@ -155,6 +169,7 @@ app.post('/templates', async (c) => {
         name: template.name,
         category: template.category || 'custom',
         author: template.author || 'anonymous',
+        uploadedBy: identity?.userId || 'unknown',
       },
     });
 
@@ -170,6 +185,12 @@ app.post('/templates', async (c) => {
 });
 
 app.delete('/templates/:id', async (c) => {
+  const isAdmin = tokenMatches(c, c.env.REVIEW_ADMIN_TOKEN);
+  if (!isAdmin) {
+    const denied = requireApiToken(c, 'STUDIO_API_TOKEN');
+    if (denied) return denied;
+  }
+
   const id = c.req.param('id');
   const bucket = c.env.TEMPLATES_BUCKET;
 
@@ -179,6 +200,19 @@ app.delete('/templates/:id', async (c) => {
 
   try {
     const key = `${id}.json`;
+    const object = await bucket.head(key);
+    if (!object) {
+      return c.json({ error: 'Template not found' }, 404);
+    }
+
+    // Ownership: only the uploader (or a review admin) may delete. Templates
+    // uploaded before this metadata existed stay deletable by any studio user.
+    const uploadedBy = object.customMetadata?.uploadedBy;
+    const identity = getIdentity(c);
+    if (!isAdmin && uploadedBy && identity?.userId !== uploadedBy) {
+      return c.json({ error: 'Only the uploader or a review admin can delete this template' }, 403);
+    }
+
     await bucket.delete(key);
 
     return c.json({
@@ -289,124 +323,6 @@ app.get('/shares/:id/download', async (c) => {
   }
 });
 
-app.post('/highlights', async (c) => {
-  try {
-    const body = await c.req.json() as {
-      transcript: Array<{ text: string; start: number; end: number }>;
-      energy: Array<{ start: number; end: number; rmsDb: number; peakDb: number }>;
-      duration: number;
-      preferences?: {
-        targetClipCount?: number;
-        minClipDuration?: number;
-        maxClipDuration?: number;
-        contentType?: string;
-      };
-    };
-
-    if (!body.transcript || !Array.isArray(body.transcript) || body.transcript.length === 0) {
-      return c.json({ error: 'transcript array is required and must not be empty' }, 400);
-    }
-
-    const prefs = body.preferences || {};
-    const targetCount = prefs.targetClipCount || 5;
-    const minDuration = prefs.minClipDuration || 5;
-    const maxDuration = prefs.maxClipDuration || 60;
-    const contentType = prefs.contentType || 'video';
-
-    const transcriptText = body.transcript
-      .map((w) => `[${w.start.toFixed(1)}s] ${w.text}`)
-      .join(' ');
-
-    const energySummary = body.energy
-      .map((e) => `${e.start.toFixed(0)}-${e.end.toFixed(0)}s: ${e.rmsDb.toFixed(1)}dB peak:${e.peakDb.toFixed(1)}dB`)
-      .join('\n');
-
-    const prompt = `You are a video editor AI. Analyze this transcript and audio energy data to find the most engaging highlight clips.
-
-Content type: ${contentType}
-Total duration: ${body.duration.toFixed(1)}s
-Target number of clips: ${targetCount}
-Clip duration range: ${minDuration}-${maxDuration} seconds
-
-TRANSCRIPT (with timestamps):
-${transcriptText}
-
-AUDIO ENERGY (per segment):
-${energySummary}
-
-Find the ${targetCount} most engaging moments. Look for:
-- Key insights or surprising statements
-- Emotional peaks (high energy + impactful words)
-- Complete thoughts that stand alone as clips
-- Natural start/end points (sentence boundaries)
-
-Respond ONLY with valid JSON in this exact format:
-{"highlights":[{"start":0,"end":0,"score":0,"title":"","reason":""}]}
-
-Where start/end are seconds, score is 1-10, title is a short description, reason explains why it's engaging.`;
-
-    const response = await c.env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 2048,
-    });
-
-    let responseText = '';
-    if (typeof response === 'string') {
-      responseText = response;
-    } else if (response && typeof response === 'object') {
-      const resp = response as Record<string, unknown>;
-      if (typeof resp.response === 'string') {
-        responseText = resp.response;
-      } else {
-        responseText = JSON.stringify(response);
-      }
-    }
-
-    if (!responseText) {
-      return c.json({ error: 'Empty AI response' }, 500);
-    }
-
-    type Highlight = { start: number; end: number; score: number; title: string; reason: string };
-    let highlights: Highlight[] = [];
-
-    try {
-      const outer = JSON.parse(responseText);
-      if (Array.isArray(outer.highlights)) {
-        highlights = outer.highlights;
-      } else if (outer.response && Array.isArray(outer.response.highlights)) {
-        highlights = outer.response.highlights;
-      }
-    } catch {
-      const jsonMatch = responseText.match(/\{[\s\S]*"highlights"[\s\S]*\}/);
-      if (!jsonMatch) {
-        return c.json({ error: 'Failed to parse AI response', raw: responseText.slice(0, 500) }, 500);
-      }
-      const parsed = JSON.parse(jsonMatch[0]);
-      highlights = parsed.highlights || parsed.response?.highlights || [];
-    }
-
-    if (!Array.isArray(highlights) || highlights.length === 0) {
-      return c.json({ error: 'No highlights found in AI response' }, 500);
-    }
-
-    const validated = highlights
-      .filter((h) => h.start >= 0 && h.end > h.start && h.end <= body.duration)
-      .map((h) => ({
-        start: Math.max(0, h.start),
-        end: Math.min(body.duration, h.end),
-        score: Math.min(10, Math.max(1, Math.round(h.score))),
-        title: h.title || 'Highlight',
-        reason: h.reason || '',
-      }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, targetCount);
-
-    return c.json({ highlights: validated });
-  } catch (error) {
-    console.error('Highlights error:', error);
-    return c.json({ error: 'Failed to generate highlights', detail: error instanceof Error ? error.message : String(error) }, 500);
-  }
-});
 
 app.get('/health', (c) => {
   return c.json({ status: 'healthy', timestamp: Date.now() });

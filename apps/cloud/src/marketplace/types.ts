@@ -21,6 +21,13 @@ export type Bindings = {
   CRASHES_BUCKET?: R2Bucket;
   /** bearer token guarding the crash list/read endpoints (GET /crash) */
   CRASH_ADMIN_TOKEN?: string;
+  /**
+   * Bearer token guarding /v1 mutating + identity-scoped routes and community
+   * template writes. Fail-closed: when unset, every gated route answers 401.
+   */
+  STUDIO_API_TOKEN?: string;
+  /** Separate bearer token for the reviewer surface (submissions list + review). */
+  REVIEW_ADMIN_TOKEN?: string;
 };
 
 export interface AssetListFilter {

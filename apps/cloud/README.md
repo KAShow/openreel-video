@@ -18,7 +18,21 @@ cd apps/cloud
 npx wrangler r2 bucket create openreel-templates
 ```
 
-### 2. Deploy Worker
+### 2. Configure secrets (required)
+
+Mutating and identity-scoped routes are **fail-closed**: until the secrets
+below exist, every gated route answers `401` (this is deliberate — a missing
+secret must never mean "allow everyone").
+
+```bash
+npx wrangler secret put STUDIO_API_TOKEN    # gates /v1 drafts/submit/install/me/* + template writes
+npx wrangler secret put REVIEW_ADMIN_TOKEN   # gates the reviewer surface (/v1/submissions + review)
+```
+
+The studio client sends `STUDIO_API_TOKEN` via `VITE_STUDIO_API_TOKEN` at
+build time. Rotate by setting a new secret; no redeploy of the Worker needed.
+
+### 3. Deploy Worker
 
 ```bash
 npm run deploy
