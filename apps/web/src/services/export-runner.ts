@@ -9,6 +9,7 @@ import {
 } from "@openreel/core";
 import { rememberExport } from "../hawsh/lastExport";
 import { logError } from "../hawsh/logger";
+import { holdExport } from "../hawsh/heldExport";
 
 export interface ExportRunnerState {
   isExporting: boolean;
@@ -19,7 +20,8 @@ export interface ExportRunnerState {
 }
 
 export type ExportContainer = "mp4" | "webm" | "mov" | "wav";
-export type ExportDeliveryMode = "download" | "file";
+/** "hold": keep the finished file for the phone's share sheet (hawsh/heldExport) instead of downloading it. */
+export type ExportDeliveryMode = "download" | "file" | "hold";
 
 const MIME_BY_EXT: Record<string, string> = {
   mp4: "video/mp4",
@@ -192,8 +194,14 @@ async function sweepStaleOpfsTemps(root: OpfsDirHandle, now: number): Promise<vo
   }
 }
 
+/** Hands the finished file over: a download by default, or kept for sharing ("hold"). */
+type Deliver = (file: Blob, filename: string, release: () => void) => void;
+const downloadDelivery: Deliver = (file, filename, release) => triggerAnchorDownload(file, filename, release);
+const holdDelivery: Deliver = (file, filename, release) => holdExport(file, filename, release);
+
 async function createOpfsDownloadWritable(
   filename: string,
+  deliver: Deliver = downloadDelivery,
 ): Promise<FileSystemWritableFileStream | null> {
   const root = await getOpfsRoot();
   if (!root) return null;
@@ -235,7 +243,7 @@ async function createOpfsDownloadWritable(
         throw new Error("Export produced an empty file");
       }
       rememberExport(file, filename);
-      triggerAnchorDownload(file, filename, () => {
+      deliver(file, filename, () => {
         root.removeEntry(tmpName).catch(() => undefined);
       });
     },
@@ -253,6 +261,7 @@ async function createOpfsDownloadWritable(
 function createBufferedDownloadWritable(
   filename: string,
   mime: string,
+  deliver: Deliver = downloadDelivery,
 ): FileSystemWritableFileStream {
   let buffer = new Uint8Array(1024 * 1024);
   let length = 0;
@@ -295,7 +304,7 @@ function createBufferedDownloadWritable(
       if (!length) throw new Error("Export produced an empty file");
       const blob = new Blob([buffer.slice(0, length)], { type: mime });
       rememberExport(blob, filename, mime);
-      triggerAnchorDownload(blob, filename);
+      deliver(blob, filename, () => undefined);
       finished = true;
       buffer = new Uint8Array(0);
     },
@@ -313,8 +322,9 @@ function createBufferedDownloadWritable(
 async function createFallbackWritable(
   filename: string,
   mime: string,
+  deliver: Deliver = downloadDelivery,
 ): Promise<FileSystemWritableFileStream> {
-  return (await createOpfsDownloadWritable(filename)) ?? createBufferedDownloadWritable(filename, mime);
+  return (await createOpfsDownloadWritable(filename, deliver)) ?? createBufferedDownloadWritable(filename, mime, deliver);
 }
 
 export async function createDownloadWritable(
@@ -324,6 +334,7 @@ export async function createDownloadWritable(
 ): Promise<FileSystemWritableFileStream> {
   const ext = filename.split(".").pop() || "mp4";
   if (options?.delivery === "download") return createFallbackWritable(filename, mime);
+  if (options?.delivery === "hold") return createFallbackWritable(filename, mime, holdDelivery);
 
   if (typeof window.openreel?.fs?.showSaveDialog === "function") {
     const chosen = await window.openreel.fs.showSaveDialog({
