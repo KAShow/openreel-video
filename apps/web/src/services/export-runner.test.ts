@@ -580,6 +580,17 @@ describe("useExportRunner showSavePicker fallback", () => {
     expect(click).toHaveBeenCalledOnce();
   });
 
+  it("hold keeps the finished file for sharing instead of downloading it", async () => {
+    const { useHeldExport, releaseHeldExport } = await import("../hawsh/heldExport");
+    const writable = await createDownloadWritable("Clip.mp4", "video/mp4", { delivery: "hold" });
+    await writable.write(new Uint8Array([1, 2]));
+    await writable.close();
+    expect(click).not.toHaveBeenCalled();
+    expect(useHeldExport.getState().filename).toBe("Clip.mp4");
+    expect(useHeldExport.getState().file?.size).toBe(2);
+    releaseHeldExport();
+  });
+
   it("keeps a selected destination write-open failure visible", async () => {
     win.showSaveFilePicker = vi.fn().mockResolvedValue({ createWritable: vi.fn().mockRejectedValue(new DOMException("Permission denied", "SecurityError")) });
     await expect(createDownloadWritable("Clip.mp4", "video/mp4")).rejects.toMatchObject({ name: "SecurityError" });

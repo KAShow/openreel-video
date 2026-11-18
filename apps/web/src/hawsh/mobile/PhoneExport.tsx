@@ -4,13 +4,14 @@
  * a progress bar, and afterwards "Save to my library" (the export is kept by rememberExport while
  * signed in to Director's Eyes).
  */
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { VideoExportSettings } from "@openreel/core";
 import { useProjectStore } from "../../stores/project-store";
 import { exportFilename, useExportRunner } from "../../services/export-runner";
 import { saveExportToLibrary } from "../api";
 import { clearLastExport, useLastExport } from "../lastExport";
 import { useHawshStore } from "../session";
+import { canShareVideo, downloadHeldExport, releaseHeldExport, shareHeldExport, useHeldExport } from "../heldExport";
 
 export type Quality = "high" | "small";
 
@@ -42,13 +43,26 @@ export const PhoneExport: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const done = startedAt !== null && !isExporting && !error && progress >= 100;
   // Only offer saving the file this sheet just exported, not an older one.
   const exported = done && blob && filename ? { blob, filename } : null;
+  // Phones that can share files keep the video for the share sheet (photo album, WhatsApp…) instead
+  // of downloading it; computers keep the automatic download.
+  const [canShare] = useState(canShareVideo);
+  const held = useHeldExport((s) => s.file);
+  const [shareFailed, setShareFailed] = useState(false);
+  useEffect(() => releaseHeldExport, []);
+
+  const share = async () => {
+    setShareFailed(false);
+    if ((await shareHeldExport()) === "failed") setShareFailed(true);
+  };
 
   const start = async () => {
     clearLastExport();
+    releaseHeldExport();
+    setShareFailed(false);
     setSaved("idle");
     setStartedAt(Date.now());
     try {
-      const writable = await runner.showSavePicker(exportFilename(project.name, "mp4"), "mp4", { delivery: "download" });
+      const writable = await runner.showSavePicker(exportFilename(project.name, "mp4"), "mp4", { delivery: canShare ? "hold" : "download" });
       runner.beginExport(writable);
       await runner.runExport(exportSettings(project, quality), "mp4", writable);
     } catch (e) {
@@ -69,7 +83,7 @@ export const PhoneExport: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     }
   };
 
-  const close = () => { if (isExporting) runner.cancel(); onClose(); };
+  const close = () => { if (isExporting) runner.cancel(); releaseHeldExport(); onClose(); };
   const s = exportSettings(project, quality);
   const phase = !startedAt || (!isExporting && error) ? "choose" : done ? "done" : "progress";
 
@@ -98,7 +112,9 @@ export const PhoneExport: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <button type="button" className={primary} disabled={!hasContent} onClick={() => void start()}>
               {hasContent ? "صدّر الفيديو" : "أضف لقطات أولاً"}
             </button>
-            <p className="text-center text-xs text-fg-muted">MP4 · {s.frameRate} fps · يُحفظ في تنزيلات جهازك</p>
+            <p className="text-center text-xs text-fg-muted">
+              MP4 · {s.frameRate} fps · {canShare ? "بعده تحفظه في الأستوديو أو ترسله" : "يُحفظ في تنزيلات جهازك"}
+            </p>
           </>
         ) : phase === "progress" ? (
           <div className="space-y-2" role="status">
@@ -111,7 +127,20 @@ export const PhoneExport: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-center text-sm">✅ تم التصدير، والفيديو في تنزيلات جهازك.</p>
+            {held ? (
+              <>
+                <p className="text-center text-sm">✅ تم التصدير.</p>
+                <button type="button" className={primary} onClick={() => void share()} data-testid="export-share">
+                  احفظ في الأستوديو أو شارك
+                </button>
+                <p className="text-center text-xs text-fg-muted">
+                  {shareFailed ? "تعذّرت المشاركة، نزّله كملف بدلاً منها." : "في القائمة: «حفظ الفيديو» للأستوديو، أو واتساب وتيك توك وغيرها."}
+                </p>
+                <button type="button" className="w-full py-2 text-sm text-fg-2 underline" onClick={downloadHeldExport}>نزّله كملف</button>
+              </>
+            ) : (
+              <p className="text-center text-sm">✅ تم التصدير، والفيديو في تنزيلات جهازك.</p>
+            )}
             {signedIn && (
               saved === "done" ? <p className="text-center text-sm text-primary">انحفظ في مكتبتك في عيون المخرج (مراجعي).</p>
                 : <button type="button" className={primary} disabled={!exported || saved === "saving"} onClick={() => void save()}>
