@@ -28,7 +28,7 @@ import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, ZOOM_STEP, clampZoom, pinchZoom, rule
 
 type Side = "start" | "end";
 interface Drag { id: string; side: Side; x0: number; dx: number }
-/** Trim handles: a slim white bar on the clip edge, inside a wider invisible touch area. */
+/** Trim handles: a slim bar in the text colour (white in dark mode, near-black in light) on the clip edge, inside a wider invisible touch area. */
 const HANDLE = 26;
 const HANDLE_BAR = 10;
 
@@ -334,7 +334,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
                           if (swallowClick.current) { swallowClick.current = false; return; }
                           select({ type: c.selection, id: c.id, trackId: row.trackId });
                         }}
-                        className={`absolute top-0 h-full overflow-hidden rounded-md border-2 text-start [-webkit-touch-callout:none] ${isSelected(c.id) ? "border-white" : "border-transparent"} ${
+                        className={`absolute top-0 h-full overflow-hidden rounded-md border-2 text-start [-webkit-touch-callout:none] ${isSelected(c.id) ? "border-fg" : "border-transparent"} ${
                           row.kind === "video" ? "bg-bg-3" : row.kind === "text" ? "bg-amber-500/80" : "bg-teal-500/70"} ${
                           moving?.id === c.id ? "z-20 -translate-y-1.5 opacity-60 shadow-xl ring-2 ring-[var(--on-chrome)]" : moving ? "transition-[left] duration-150" : ""}`}
                         style={{ left, width: w }}>
@@ -359,8 +359,8 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
                           onClick={(e) => e.stopPropagation()}
                           className={`absolute top-0 z-10 flex h-full items-stretch ${side === "start" ? "justify-end" : "justify-start"}`}
                           style={{ left: side === "start" ? left - HANDLE + 2 : left + w - 2, width: HANDLE, touchAction: "none" }}>
-                          <span className={`flex items-center justify-center bg-white ${side === "start" ? "rounded-l-md" : "rounded-r-md"}`} style={{ width: HANDLE_BAR }} aria-hidden>
-                            <span className="h-3 w-px bg-black/60" />
+                          <span className={`flex items-center justify-center bg-fg ${side === "start" ? "rounded-l-md" : "rounded-r-md"}`} style={{ width: HANDLE_BAR }} aria-hidden>
+                            <span className="h-3 w-px bg-bg" />
                           </span>
                         </button>
                       ))}
@@ -400,7 +400,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
       <input ref={audioInput} type="file" accept="audio/*" multiple hidden data-testid="add-audio-file"
         onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; if (files.length) void importAudio(files, 0); }} />
       {/* Fixed playhead in the middle. */}
-      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)]" aria-hidden />
+      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-fg shadow-[0_0_0_1px_var(--bg)]" aria-hidden />
       {!moving && (
         <div className="absolute bottom-2 right-2 z-30 flex overflow-hidden rounded-full bg-black/70 text-white" data-testid="timeline-zoom">
           <button type="button" aria-label="تصغير الخط الزمني" disabled={zoom <= MIN_ZOOM} onClick={() => setZoom(clampZoom(zoom / ZOOM_STEP))}

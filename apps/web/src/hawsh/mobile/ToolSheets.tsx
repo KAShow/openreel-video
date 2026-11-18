@@ -8,7 +8,6 @@ import { ChevronLeft, ChevronRight, Clapperboard, Mic, Music, Square } from "luc
 import { useProjectStore } from "../../stores/project-store";
 import { useTimelineStore } from "../../stores/timeline-store";
 import { useUIStore } from "../../stores/ui-store";
-import { useRouter } from "../../hooks/use-router";
 // The assistant guide and the chat store bring the AI agent's whole tool registry with them, so
 // they load when the guide opens, not with the editor (plan phase 5).
 const AssistantGuide = lazy(() =>
@@ -17,12 +16,10 @@ const AssistantGuide = lazy(() =>
 const chatDraft = () => import("../../stores/chat-store").then((m) => m.useChatStore.getState().draft);
 import { HawshLibraryDialog } from "../HawshLibrary";
 import { useHawshStore } from "../session";
-import { SKIP_WELCOME } from "../simple";
 import { logEvent } from "../logger";
 import { ServerCaptionPanel } from "../ServerCaptionPanel";
 import { CaptionStyleEditor } from "../CaptionStyleEditor";
 import { captionClips } from "../caption-look";
-import { AppearancePicker } from "../AppearanceControls";
 import { captionClipId } from "./add-tools";
 import { sheetTarget } from "./live";
 import {
@@ -365,7 +362,6 @@ export const EditSheet: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
 export const MoreSheet: React.FC<{ onOpenAssistant: () => void }> = ({ onOpenAssistant }) => {
   const project = useProjectStore((s) => s.project);
-  const { navigate } = useRouter();
   const [view, setView] = useState<"menu" | "guide" | "report">("menu");
   const [report, setReport] = useState("");
   const [busy, setBusy] = useState(false);
@@ -400,9 +396,6 @@ export const MoreSheet: React.FC<{ onOpenAssistant: () => void }> = ({ onOpenAss
 
   return (
     <div className="space-y-4">
-      <Row label="المظهر">
-        <AppearancePicker />
-      </Row>
       <Row label="مقاس الفيديو">
         <div className="grid grid-cols-2 gap-2">
           {FORMATS.map((f) => (
@@ -418,11 +411,6 @@ export const MoreSheet: React.FC<{ onOpenAssistant: () => void }> = ({ onOpenAss
         <button type="button" className={bigButton} onClick={() => { setView("guide"); void chatDraft().then((draft) => { draftBefore.current = draft; }); }}>
           <span className="text-lg" aria-hidden>💡</span><span><b className="block">دليل المساعد</b><span className="text-xs text-fg-muted">وش تقدر تطلب منه، بأمثلة</span></span>
         </button>
-        {!SKIP_WELCOME && (
-          <button type="button" className={bigButton} onClick={() => navigate("welcome")}>
-            <span className="text-lg" aria-hidden>🗂️</span><span><b className="block">مشاريعي</b><span className="text-xs text-fg-muted">مشروعك محفوظ تلقائياً</span></span>
-          </button>
-        )}
         <button type="button" className={bigButton} onClick={() => setView("report")}>
           <span className="text-lg" aria-hidden>🛟</span><span><b className="block">أبلغ عن مشكلة</b><span className="text-xs text-fg-muted">تصلنا مباشرة لنصلحها</span></span>
         </button>

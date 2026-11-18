@@ -95,8 +95,9 @@ vec4 px(vec2 fc) { return texture(u_tex, fc / u_size); }
 `;
 
 const FRAGMENTS = {
+  // The last pass draws to the canvas, whose row 0 is the bottom: flip here so the picture is upright.
   copy: `${HEADER}
-void main() { outColor = px(gl_FragCoord.xy); }`,
+void main() { outColor = px(vec2(gl_FragCoord.x, u_size.y - gl_FragCoord.y)); }`,
   matrix: `${HEADER}
 uniform mat3 u_m;
 uniform vec3 u_off;
@@ -277,7 +278,9 @@ export function renderFastEffects(key: string, src: FastSource, effects: readonl
     }
     resize(s, w, h);
     gl.viewport(0, 0, w, h);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    // No UNPACK_FLIP_Y: iPhone Safari ignores it for canvas uploads, which turned the video upside down
+    // there. Textures keep the picture top row first, and the final copy pass flips it onto the canvas.
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, s.source);
