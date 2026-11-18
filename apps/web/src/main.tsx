@@ -11,6 +11,7 @@ import { initCustomFonts } from "./components/editor/inspector/font-options";
 import { takeHandoff } from "./hawsh/handoff";
 import { initHawsh } from "./hawsh/session";
 import { installLogger } from "./hawsh/logger";
+import { installViewport } from "./hawsh/viewport";
 import { useThemeStore } from "./stores/theme-store";
 import { useAccentStore } from "./hawsh/appearance";
 import { startArabicUi } from "./hawsh/i18n/dom";
@@ -45,6 +46,7 @@ if (isDesktop) {
 // Director's Eyes sign-in: strip the one-time code from the address bar before the router reads the hash.
 void initHawsh(takeHandoff());
 installLogger();
+installViewport();
 // Theme (dark by default) and the accent colour, both remembered in this browser.
 useThemeStore.getState();
 useAccentStore.getState();

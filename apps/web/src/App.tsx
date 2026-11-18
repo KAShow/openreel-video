@@ -168,7 +168,7 @@ function App() {
         : undefined;
 
   return (
-    <div className="h-screen h-[100dvh] w-screen bg-background text-text-primary overflow-hidden">
+    <div className="h-screen h-[100dvh] w-screen bg-background text-text-primary overflow-hidden" style={{ height: "var(--app-height, 100dvh)" }}>
       <MobileBlocker />
       {isSharePage ? (
         <Suspense fallback={<SplashScreen status="نفتح الفيديو…" />}>
