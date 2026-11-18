@@ -220,8 +220,10 @@
   body {
     margin: 0;
     padding: 0;
-    height: 100%;
+    height: var(--app-height, 100%);
     overflow: hidden;
+    /* No double-tap zoom; pinch is handled in hawsh/viewport.ts. */
+    touch-action: manipulation;
   }
 
   body {
