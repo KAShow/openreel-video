@@ -30,7 +30,9 @@ type Side = "start" | "end";
 interface Drag { id: string; side: Side; x0: number; dx: number }
 /** Trim handles: a slim bar in the text colour (white in dark mode, near-black in light) on the clip edge, inside a wider invisible touch area. */
 const HANDLE = 26;
-const HANDLE_BAR = 10;
+const HANDLE_BAR = 14;
+/** How far the bar sits inside the clip, so it covers the edge frames instead of hanging off them. */
+const HANDLE_INSET = 14;
 
 interface Moving { id: string; rowKey: string; selection: RowClip["selection"]; origin: number; free: boolean; x0: number; scroll0: number; dx: number }
 const LONG_PRESS_MS = 180;
@@ -358,7 +360,7 @@ export const TouchTimeline: React.FC<{ onAddText: () => void }> = ({ onAddText }
                           onPointerUp={() => endDrag(c)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }}
                           onClick={(e) => e.stopPropagation()}
                           className={`absolute top-0 z-10 flex h-full items-stretch ${side === "start" ? "justify-end" : "justify-start"}`}
-                          style={{ left: side === "start" ? left - HANDLE + 2 : left + w - 2, width: HANDLE, touchAction: "none" }}>
+                          style={{ left: side === "start" ? left - HANDLE + HANDLE_INSET : left + w - HANDLE_INSET, width: HANDLE, touchAction: "none" }}>
                           <span className={`flex items-center justify-center bg-fg ${side === "start" ? "rounded-l-md" : "rounded-r-md"}`} style={{ width: HANDLE_BAR }} aria-hidden>
                             <span className="h-3 w-px bg-bg" />
                           </span>

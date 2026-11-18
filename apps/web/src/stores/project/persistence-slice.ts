@@ -1,11 +1,12 @@
 import type { StoreApi } from "zustand";
-import type { Project } from "@openreel/core";
+import type { MediaItem, Project } from "@openreel/core";
 import {
   ActionExecutor,
   ActionHistory,
   normalizeGeneratedShaders,
   registerProjectGeneratedShaders,
 } from "@openreel/core";
+import { getMediaBridge, initializeMediaBridge } from "../../bridges/media-bridge";
 import { autoSaveManager, initializeAutoSave } from "../../services/auto-save";
 import { loadProjectMedia } from "../../services/media-storage";
 import { projectManager } from "../../services/project-manager";
@@ -29,6 +30,41 @@ export type PersistenceSlice = Pick<
   | "forceSave"
   | "getFullProject"
 >;
+
+/**
+ * A saved project keeps no filmstrip frames, and the single thumbnail made by a <video> element fails on
+ * iPhone, so after reopening the strip on the timeline had no first frame (or none at all). The frames
+ * are made again from the stored files with the same decoder as the import, in the background so the
+ * project opens at once.
+ */
+export async function rebuildFilmstrips(items: readonly MediaItem[], projectId: string, get: Get, set: Set): Promise<void> {
+  const todo = items.filter((m) => m.type === "video" && m.blob instanceof Blob && !m.filmstripThumbnails?.length);
+  if (todo.length === 0) return;
+  try {
+    let bridge = getMediaBridge();
+    if (!bridge.isInitialized()) { await initializeMediaBridge(); bridge = getMediaBridge(); }
+    for (const item of todo) {
+      const thumbs = await bridge.generateThumbnailsForMedia(item.blob as Blob, "video").catch(() => []);
+      if (thumbs.length === 0) continue;
+      const current = get().project;
+      if (current.id !== projectId) return;
+      if (!current.mediaLibrary.items.some((m) => m.id === item.id && m.blob === item.blob)) continue;
+      set({
+        project: {
+          ...current,
+          mediaLibrary: {
+            ...current.mediaLibrary,
+            items: current.mediaLibrary.items.map((m) => (m.id === item.id
+              ? { ...m, thumbnailUrl: thumbs[0].dataUrl, filmstripThumbnails: thumbs.map((t) => ({ timestamp: t.timestamp, url: t.dataUrl })) }
+              : m)),
+          },
+        },
+      });
+    }
+  } catch (error) {
+    console.warn("[ProjectStore] Could not rebuild the timeline thumbnails:", error);
+  }
+}
 
 // Guards against re-running auto-save setup (which subscribes to the store and
 // starts the interval) more than once across editor mount/unmount cycles, which
@@ -184,6 +220,7 @@ export function createPersistenceSlice(
         });
 
         await projectManager.addToRecent(projectWithMedia);
+        void rebuildFilmstrips(restoredItems, projectWithMedia.id, get, set);
         return true;
       }
       return false;
